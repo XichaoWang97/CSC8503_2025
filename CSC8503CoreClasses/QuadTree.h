@@ -48,7 +48,7 @@ namespace NCL {
 			{
 				if (!CollisionDetection::AABBTest(objectPos,
 					Vector3(position.x, 0, position.y), objectSize,
-					Vector3(size.x, 1000.0 f, size.y))) {
+					Vector3(size.x, 1000.0f, size.y))) {
 					return;
 				}
 				if (children) { // not a leaf node , just descend the tree
