@@ -88,6 +88,8 @@ namespace NCL {
 			}
 
 			GameObject* objClosest = nullptr;
+
+			void BridgeConstraintTest();
 		};
 	}
 }
