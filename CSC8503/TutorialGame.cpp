@@ -96,6 +96,10 @@ void TutorialGame::UpdateGame(float dt) {
 		world.GetMainCamera().SetYaw(angles.y);
 	}
 
+	if (testStateObject) { // Update our test state object
+		testStateObject -> Update(dt);
+	}
+
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
 		InitWorld(); //We can reset the simulation at any time with F1
 		selectionObject = nullptr;
@@ -193,6 +197,8 @@ void TutorialGame::InitWorld() {
 	InitGameExamples();
 
 	AddFloorToWorld(Vector3(0, -20, 0));
+
+	testStateObject = AddStateObjectToWorld(Vector3(0, 10, 0)); // Add game object with state machine
 }
 
 /*
@@ -556,4 +562,24 @@ void TutorialGame::BridgeConstraintTest() {
 
 	PositionConstraint * constraint = new PositionConstraint(previous, end, maxDistance);
 	world.AddConstraint(constraint);
+}
+
+StateGameObject* TutorialGame::AddStateObjectToWorld(const Vector3& position) {
+	testStateObject = new StateGameObject();
+
+	SphereVolume* volume = new SphereVolume(0.5f);
+	testStateObject->SetBoundingVolume(volume);
+	testStateObject->GetTransform()
+		.SetScale(Vector3(2, 2, 2))
+		.SetPosition(position);
+
+	testStateObject->SetRenderObject(new RenderObject(testStateObject->GetTransform(), bonusMesh, glassMaterial));
+	testStateObject->SetPhysicsObject(new PhysicsObject(testStateObject->GetTransform(), testStateObject->GetBoundingVolume()));
+
+	testStateObject->GetPhysicsObject()->SetInverseMass(1.0f);
+	testStateObject->GetPhysicsObject()->InitSphereInertia();
+
+	world.AddGameObject(testStateObject);
+
+	return testStateObject;
 }

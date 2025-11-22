@@ -1,5 +1,7 @@
 #pragma once
 #include "RenderObject.h"
+#include "StateGameObject.h"
+
 namespace NCL {
 	class Controller;
 
@@ -25,6 +27,9 @@ namespace NCL {
 			void InitCamera();
 
 			void InitWorld();
+
+			StateGameObject* AddStateObjectToWorld(const Vector3& position);
+			StateGameObject* testStateObject;
 
 			/*
 			These are some of the world/object creation functions I created when testing the functionality
