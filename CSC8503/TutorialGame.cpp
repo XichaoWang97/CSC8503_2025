@@ -192,7 +192,7 @@ void TutorialGame::InitWorld() {
 	world.ClearAndErase();
 	physics.Clear();
 
-	CreatedMixedGrid(15, 15, 3.5f, 3.5f);
+	CreatedMixedGrid(5, 5, 3.5f, 3.5f);
 
 	InitGameExamples();
 

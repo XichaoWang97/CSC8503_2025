@@ -14,6 +14,7 @@
 
 #include "TutorialGame.h"
 #include "NetworkedGame.h"
+#include "MyGame.h"
 
 #include "PushdownMachine.h"
 
@@ -372,7 +373,7 @@ int main() {
 	GameTechRenderer* renderer = new GameTechRenderer(*world);
 #endif
 
-	TutorialGame* g = new TutorialGame(*world, *renderer, *physics);
+	MyGame* g = new MyGame(*world, *renderer, *physics);
 
 	w->GetTimer().GetTimeDeltaSeconds(); //Clear the timer so we don't get a larget first dt!
 	while (w->UpdateWindow() && !Window::GetKeyboard()->KeyDown(KeyCodes::ESCAPE)) {
