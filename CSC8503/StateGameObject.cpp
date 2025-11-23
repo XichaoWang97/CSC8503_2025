@@ -7,7 +7,8 @@
 using namespace NCL;
 using namespace CSC8503;
 
-StateGameObject::StateGameObject() {
+StateGameObject::StateGameObject(const std::string& objectName) {
+	name = objectName;
 	counter = 0.0f;
 	stateMachine = new StateMachine();
 	

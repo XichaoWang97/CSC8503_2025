@@ -308,8 +308,42 @@ bool CollisionDetection::AABBSphereIntersection(const AABBVolume& volumeA, const
 	return false;
 }
 
-bool  CollisionDetection::OBBSphereIntersection(const OBBVolume& volumeA, const Transform& worldTransformA,
+bool CollisionDetection::OBBSphereIntersection(const OBBVolume& volumeA, const Transform& worldTransformA,
 	const SphereVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
+	// Get OBB information about world transform and orientation
+	Quaternion orientation = worldTransformA.GetOrientation();
+	Vector3 position = worldTransformA.GetPosition();
+
+	Matrix3 transform = Quaternion::RotationMatrix<Matrix3>(orientation);
+	Matrix3 invTransform = Quaternion::RotationMatrix<Matrix3>(orientation.Conjugate());
+
+	// Transform the sphere center into the OBB's local space
+	Vector3 localSpherePos = invTransform * (worldTransformB.GetPosition() - position);
+
+	// Perform AABB vs Sphere detection in local space (similar to AABBSphereIntersection)
+	Vector3 boxSize = volumeA.GetHalfDimensions();
+	// Find the point on the AABB that is closest to the sphere center (Clamp)
+	Vector3 closestPointInLocal = Vector::Clamp(localSpherePos, -boxSize, boxSize);
+
+	// calculate the distance from the sphere center to this closest point
+	Vector3 localDist = localSpherePos - closestPointInLocal;
+	float distance = Vector::Length(localDist);
+
+	// collision check
+	if (distance < volumeB.GetRadius()) {
+		
+		Vector3 collisionNormal = transform * Vector::Normalise(localDist);
+		float penetration = (volumeB.GetRadius() - distance);
+
+		Vector3 worldClosestPoint = (transform * closestPointInLocal) + position;
+
+		Vector3 contactPointVector = worldClosestPoint - position; // OBB center to contact point in world space
+		Vector3 localA = contactPointVector;
+		Vector3 localB = -collisionNormal * volumeB.GetRadius(); // To sphere surface in world space
+
+		collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+		return true;
+	}
 	return false;
 }
 
@@ -327,7 +361,181 @@ bool CollisionDetection::SphereCapsuleIntersection(
 
 bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transform& worldTransformA,
 	const OBBVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
-	return false;
+
+	// === 1. 取出中心、半边长、旋转 ===
+	Vector3 centreA = worldTransformA.GetPosition();
+	Vector3 centreB = worldTransformB.GetPosition();
+	Vector3 halfSizeA = volumeA.GetHalfDimensions();
+	Vector3 halfSizeB = volumeB.GetHalfDimensions();
+
+	Quaternion qA = worldTransformA.GetOrientation();
+	Quaternion qB = worldTransformB.GetOrientation();
+
+	Matrix3 rotA = Quaternion::RotationMatrix<Matrix3>(qA);
+	Matrix3 rotB = Quaternion::RotationMatrix<Matrix3>(qB);
+
+	// OBB 的局部坐标轴（世界空间）
+	Vector3 A[3] = {
+		rotA * Vector3(1,0,0),
+		rotA * Vector3(0,1,0),
+		rotA * Vector3(0,0,1)
+	};
+
+	Vector3 B[3] = {
+		rotB * Vector3(1,0,0),
+		rotB * Vector3(0,1,0),
+		rotB * Vector3(0,0,1)
+	};
+
+	// === 2. 构造旋转矩阵 R = dot(Ai,Bj)，以及 t = B 在 A 局部空间中的中心偏移 ===
+	float R[3][3];
+	float absR[3][3];
+
+	const float EPSILON = 1e-6f;
+
+	for (int i = 0; i < 3; ++i) {
+		for (int j = 0; j < 3; ++j) {
+			R[i][j] = Vector::Dot(A[i], B[j]);
+			absR[i][j] = std::fabs(R[i][j]) + EPSILON; // 加一点偏移避免数值误差
+		}
+	}
+
+	Vector3 tWorld = centreB - centreA;
+	// t 用 A 的坐标系表示
+	Vector3 t(
+		Vector::Dot(tWorld, A[0]),
+		Vector::Dot(tWorld, A[1]),
+		Vector::Dot(tWorld, A[2])
+	);
+
+	float minPenetration = FLT_MAX;
+	Vector3 bestAxis;     // 碰撞法线（世界空间）
+
+	auto updateBestAxis = [&](const Vector3& axis, float penetration) {
+		if (penetration < minPenetration) {
+			minPenetration = penetration;
+			bestAxis = axis;
+		}
+		};
+
+	// === 3. 15 个分离轴测试（3 + 3 + 9） ===
+	// --- 3.1 A 的三个轴 ---
+	for (int i = 0; i < 3; ++i) {
+		float ra = halfSizeA[i];
+		float rb =
+			halfSizeB.x * absR[i][0] +
+			halfSizeB.y * absR[i][1] +
+			halfSizeB.z * absR[i][2];
+
+		float dist = std::fabs(t[i]);
+		if (dist > ra + rb) {
+			return false; // 找到分离轴，没碰到
+		}
+
+		float penetration = (ra + rb) - dist;
+
+		// 法线要从 A 指向 B：根据 t 在该轴上的符号调整方向
+		Vector3 axis = A[i];
+		if (Vector::Dot(tWorld, axis) < 0.0f) {
+			axis = -axis;
+		}
+		updateBestAxis(axis, penetration);
+	}
+
+	// --- 3.2 B 的三个轴 ---
+	for (int j = 0; j < 3; ++j) {
+		float rb = halfSizeB[j];
+		float ra =
+			halfSizeA.x * absR[0][j] +
+			halfSizeA.y * absR[1][j] +
+			halfSizeA.z * absR[2][j];
+
+		float dist =
+			std::fabs(t.x * R[0][j] +
+				t.y * R[1][j] +
+				t.z * R[2][j]);
+
+		if (dist > ra + rb) {
+			return false; // 分离轴
+		}
+
+		float penetration = (ra + rb) - dist;
+
+		Vector3 axis = B[j];
+		if (Vector::Dot(tWorld, axis) < 0.0f) {
+			axis = -axis;
+		}
+		updateBestAxis(axis, penetration);
+	}
+
+	// --- 3.3 交叉轴 Ai x Bj（9 个） ---
+	for (int i = 0; i < 3; ++i) {
+		for (int j = 0; j < 3; ++j) {
+
+			// 交叉轴如果非常小，就说明两轴接近平行，可以跳过
+			Vector3 axis = Vector::Cross(A[i], B[j]);
+			float axisLenSq = Vector::Dot(axis, axis);
+			if (axisLenSq < EPSILON * EPSILON) {
+				continue;
+			}
+			axis = Vector::Normalise(axis);
+
+			float ra =
+				halfSizeA[(i + 1) % 3] * absR[(i + 2) % 3][j] +
+				halfSizeA[(i + 2) % 3] * absR[(i + 1) % 3][j];
+
+			float rb =
+				halfSizeB[(j + 1) % 3] * absR[i][(j + 2) % 3] +
+				halfSizeB[(j + 2) % 3] * absR[i][(j + 1) % 3];
+
+			// t 在该交叉轴上的投影长度
+			float dist =
+				std::fabs(
+					t[(i + 2) % 3] * R[(i + 1) % 3][j] -
+					t[(i + 1) % 3] * R[(i + 2) % 3][j]);
+
+			if (dist > ra + rb) {
+				return false; // 分离轴
+			}
+
+			float penetration = (ra + rb) - dist;
+
+			if (Vector::Dot(tWorld, axis) < 0.0f) {
+				axis = -axis;
+			}
+			updateBestAxis(axis, penetration);
+		}
+	}
+
+	// === 4. 没有分离轴 -> 有碰撞，用最小穿透轴作为法线 ===
+	Vector3 collisionNormal = Vector::Normalise(bestAxis);
+	float penetration = minPenetration;
+
+	// === 5. 近似计算接触点（用支持函数求两 OBB 在法线方向的最外点） ===
+	auto SupportPointOBB = [](const Vector3& centre,
+		const Vector3 axes[3],
+		const Vector3& halfSize,
+		const Vector3& dir) {
+			Vector3 result = centre;
+			for (int i = 0; i < 3; ++i) {
+				float sign = Vector::Dot(dir, axes[i]) > 0.0f ? 1.0f : -1.0f;
+				result += axes[i] * (sign * halfSize[i]);
+			}
+			return result;
+		};
+
+	Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
+	Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
+
+	// 取两个面上点的中点当作接触点（体验上会更稳定一点）
+	Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
+
+	// localA / localB 是相对各自中心的偏移
+	Vector3 localA = contactWorld - centreA;
+	Vector3 localB = contactWorld - centreB;
+
+	collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+	return true;
 }
 
 Matrix4 GenerateInverseView(const Camera &c) {

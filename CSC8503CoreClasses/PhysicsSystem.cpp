@@ -233,7 +233,7 @@ so that objects separate back out.
 void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, CollisionDetection::ContactPoint& p) const 
 {
 	PhysicsObject* physA = a.GetPhysicsObject();
-	PhysicsObject * physB = b.GetPhysicsObject();
+	PhysicsObject* physB = b.GetPhysicsObject();
 	
 	Transform & transformA = a.GetTransform();
 	Transform & transformB = b.GetTransform();
@@ -245,9 +245,31 @@ void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, Collis
 	}
 	
 	// Separate them out using projection
-	transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA -> GetInverseMass() / totalMass)));
-	
-	transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB -> GetInverseMass() / totalMass)));
+	//transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA -> GetInverseMass() / totalMass)));
+	//transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB -> GetInverseMass() / totalMass)));
+	// Separate them out using projection
+
+	float penetrationSlop = 0.002f;
+	// 2. 引入 Bias (位置修正系数)：范围 0.0 ~ 1.0
+	// 0.1 表示每帧只修 10% 的穿透（很软，像泥巴）
+	// 0.8 表示每帧修 80% 的穿透（硬，但不会太弹）
+	// 推荐 0.4f 到 0.8f 之间测试
+	float positionCorrectionBias = 0.4f;
+
+	if (p.penetration > penetrationSlop) {
+		// 计算这一帧需要修正的距离：(穿透深度 - 允许误差) * 缓动系数
+		float recovery = (p.penetration - penetrationSlop) * positionCorrectionBias;
+
+		float individualMass = physA->GetInverseMass() / totalMass;
+
+		// 应用修正
+		if (physA->GetInverseMass() > 0) {
+			transformA.SetPosition(transformA.GetPosition() - (p.normal * recovery * individualMass));
+		}
+		if (physB->GetInverseMass() > 0) {
+			transformB.SetPosition(transformB.GetPosition() + (p.normal * recovery * (physB->GetInverseMass() / totalMass)));
+		}
+	}
 
 	Vector3 relativeA = p.localA;
 	Vector3 relativeB = p.localB;
@@ -267,9 +289,13 @@ void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, Collis
 	float angularEffect = Vector::Dot(inertiaA + inertiaB, p.normal);
 	
 	float cRestitution = 0.66f; // disperse some kinectic energy
-	
+	// 如果相对速度非常小（主要由重力引起），则视为静止接触，不进行反弹
+	if (abs(impulseForce) < 1.0f) { // 这里的 2.0f 是一个经验阈值，你可以根据重力大小调整
+		cRestitution = 0.0f;
+	}
+
 	float j = (-(1.0f + cRestitution) * impulseForce) / (totalMass + angularEffect);
-	
+
 	Vector3 fullImpulse = p.normal * j;
 
 	physA -> ApplyLinearImpulse(-fullImpulse);

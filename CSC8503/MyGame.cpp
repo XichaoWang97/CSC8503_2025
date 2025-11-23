@@ -192,7 +192,7 @@ void MyGame::InitWorld() {
 	world.ClearAndErase();
 	physics.Clear();
 
-	CreatedMixedGrid(5, 5, 3.5f, 3.5f);
+	CreatedMixedGrid(2, 2, 3.5f, 3.5f);
 
 	InitGameExamples();
 
@@ -202,7 +202,7 @@ void MyGame::InitWorld() {
 }
 
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
-	GameObject* floor = new GameObject();
+	GameObject* floor = new GameObject("floor");
 
 	Vector3 floorSize = Vector3(200, 2, 200);
 	AABBVolume* volume = new AABBVolume(floorSize);
@@ -223,7 +223,7 @@ GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 }
 
 GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, float inverseMass) {
-	GameObject* sphere = new GameObject();
+	GameObject* sphere = new GameObject("sphere");
 
 	Vector3 sphereSize = Vector3(radius, radius, radius);
 	SphereVolume* volume = new SphereVolume(radius);
@@ -245,7 +245,7 @@ GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, floa
 }
 
 GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, float inverseMass) {
-	GameObject* cube = new GameObject();
+	GameObject* cube = new GameObject("cube");
 
 	AABBVolume* volume = new AABBVolume(dimensions);
 	cube->SetBoundingVolume(volume);
@@ -269,7 +269,7 @@ GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
 	float meshSize = 1.0f;
 	float inverseMass = 0.5f;
 
-	GameObject* character = new GameObject();
+	GameObject* character = new GameObject("player");
 	SphereVolume* volume = new SphereVolume(1.0f);
 
 	character->SetBoundingVolume(volume);
@@ -293,7 +293,7 @@ GameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	float meshSize = 3.0f;
 	float inverseMass = 0.5f;
 
-	GameObject* character = new GameObject();
+	GameObject* character = new GameObject("enemy");
 
 	AABBVolume* volume = new AABBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
 	character->SetBoundingVolume(volume);
@@ -314,7 +314,7 @@ GameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 }
 
 GameObject* MyGame::AddBonusToWorld(const Vector3& position) {
-	GameObject* apple = new GameObject();
+	GameObject* apple = new GameObject("bonus");
 
 	SphereVolume* volume = new SphereVolume(0.5f);
 	apple->SetBoundingVolume(volume);
@@ -539,18 +539,18 @@ void MyGame::BridgeConstraintTest() {
 }
 
 StateGameObject* MyGame::AddStateObjectToWorld(const Vector3& position) {
-	testStateObject = new StateGameObject();
+	testStateObject = new StateGameObject("stateGameObj");
 
-	SphereVolume* volume = new SphereVolume(0.5f);
+	SphereVolume* volume = new SphereVolume(1.0f);
 	testStateObject->SetBoundingVolume(volume);
 	testStateObject->GetTransform()
-		.SetScale(Vector3(2, 2, 2))
+		.SetScale(Vector3(1, 1, 1))
 		.SetPosition(position);
 
-	testStateObject->SetRenderObject(new RenderObject(testStateObject->GetTransform(), bonusMesh, glassMaterial));
+	testStateObject->SetRenderObject(new RenderObject(testStateObject->GetTransform(), catMesh, notexMaterial));
 	testStateObject->SetPhysicsObject(new PhysicsObject(testStateObject->GetTransform(), testStateObject->GetBoundingVolume()));
 
-	testStateObject->GetPhysicsObject()->SetInverseMass(1.0f);
+	testStateObject->GetPhysicsObject()->SetInverseMass(0.5f);
 	testStateObject->GetPhysicsObject()->InitSphereInertia();
 
 	world.AddGameObject(testStateObject);
