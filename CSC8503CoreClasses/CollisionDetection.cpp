@@ -6,7 +6,6 @@
 #include "Window.h"
 #include "Maths.h"
 #include "Debug.h"
-
 using namespace NCL;
 
 bool CollisionDetection::RayPlaneIntersection(const Ray&r, const Plane&p, RayCollision& collisions) {
@@ -362,7 +361,6 @@ bool CollisionDetection::SphereCapsuleIntersection(
 bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transform& worldTransformA,
 	const OBBVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
 
-	// === 1. 取出中心、半边长、旋转 ===
 	Vector3 centreA = worldTransformA.GetPosition();
 	Vector3 centreB = worldTransformB.GetPosition();
 	Vector3 halfSizeA = volumeA.GetHalfDimensions();
@@ -522,7 +520,7 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 				result += axes[i] * (sign * halfSize[i]);
 			}
 			return result;
-		};
+	};
 
 	Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
 	Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
@@ -531,10 +529,14 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 	Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
 
 	// localA / localB 是相对各自中心的偏移
-	Vector3 localA = contactWorld - centreA;
-	Vector3 localB = contactWorld - centreB;
+	Matrix3 invRotA = NCL::Maths::Matrix::Transpose(rotA);
+	Matrix3 invRotB = NCL::Maths::Matrix::Transpose(rotB);
+
+	Vector3 localA = invRotA * (contactWorld - centreA);
+	Vector3 localB = invRotB * (contactWorld - centreB);
 
 	collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+
 	return true;
 }
 

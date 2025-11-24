@@ -16,6 +16,7 @@ namespace NCL {
 		class PhysicsSystem;
 		class GameWorld;
 		class GameObject;
+		class PositionConstraint; // For the pressure plate/door puzzle
 
 		class MyGame {
 		public:
@@ -26,36 +27,33 @@ namespace NCL {
 
 		protected:
 			void InitCamera();
-
 			void InitWorld();
-
-			StateGameObject* AddStateObjectToWorld(const Vector3& position);
-			StateGameObject* testStateObject;
-
 			/*
-			These are some of the world/object creation functions I created when testing the functionality
-			in the module. Feel free to mess around with them to see different objects being created in different
-			test scenarios (constraints, collision types, and so on).
-			*/
-			void InitGameExamples();
+			 * 任务 0.2: 关卡初始化函数
+			 * 用于构建 Part A 的 Courier 关卡环境
+			 */
+			void InitCourierLevel();
 
-			void CreateSphereGrid(int numRows, int numCols, float rowSpacing, float colSpacing, float radius);
-			void CreatedMixedGrid(int numRows, int numCols, float rowSpacing, float colSpacing);
-			void CreateAABBGrid(int numRows, int numCols, float rowSpacing, float colSpacing, const NCL::Maths::Vector3& cubeDims);
-
-			bool SelectObject();
-			void MoveSelectedObject();
-			void DebugObjectMovement();
-			void LockedObjectMovement();
-
+			// Add specific game objects to the world
+			GameObject* AddPlayerToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f);
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f);
-
-			GameObject* AddPlayerToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddBonusToWorld(const NCL::Maths::Vector3& position);
 
+			// --- 任务 0.2 新增: 关卡特定对象指针 ---
+			GameObject* targetZone = nullptr;   // 终点区域
+			GameObject* puzzleDoor = nullptr;   // 谜题门
+			GameObject* pressurePlate = nullptr; // 压力板
+			// --- 任务 0.3 新增: 玩家指针与控制 ---
+			GameObject* playerObject = nullptr;
+			void PlayerControl();
+
+			// original code below
+			StateGameObject* AddStateObjectToWorld(const Vector3& position);
+			StateGameObject* testStateObject;
+			
 			GameWorld& world;
 			GameTechRendererInterface& renderer;
 			PhysicsSystem& physics;
@@ -96,6 +94,22 @@ namespace NCL {
 			GameObject* objClosest = nullptr;
 
 			void BridgeConstraintTest();
+
+			// Not used ---------------------------------------------------------------------------------------------
+			
+
+			void InitGameExamples();
+
+			void CreateSphereGrid(int numRows, int numCols, float rowSpacing, float colSpacing, float radius);
+			void CreatedMixedGrid(int numRows, int numCols, float rowSpacing, float colSpacing);
+			void CreateAABBGrid(int numRows, int numCols, float rowSpacing, float colSpacing, const NCL::Maths::Vector3& cubeDims);
+
+			bool SelectObject();
+			void MoveSelectedObject();
+			void DebugObjectMovement();
+			void LockedObjectMovement();
+
+			// ---------------------------------------------------------------------------------------------
 		};
 	}
 }

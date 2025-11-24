@@ -96,8 +96,18 @@ void MyGame::UpdateGame(float dt) {
 		world.GetMainCamera().SetYaw(angles.y);
 	}
 
-	if (testStateObject) { // Update our test state object
-		testStateObject->Update(dt);
+	// --- 调试信息显示 ---
+	// 如果有终点，在此处画个标记或者文字
+	if (targetZone) {
+		Debug::Print("Destination", Vector2(80, 20), Debug::GREEN);
+	}
+	// --- 任务 0.3: 玩家控制 ---
+	// 只有当并不是在自由视角模式(SelectionMode)下，且玩家存在时才允许控制
+	if (!inSelectionMode && playerObject) {
+		PlayerControl();
+		// 显示操作提示
+		Debug::Print("WASD: Move", Vector2(5, 80), Debug::WHITE);
+		Debug::Print("SPACE: Jump", Vector2(5, 85), Debug::WHITE);
 	}
 
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
@@ -131,10 +141,8 @@ void MyGame::UpdateGame(float dt) {
 		world.ShuffleObjects(false);
 	}
 
-	if (lockedObject) {
-		LockedObjectMovement();
-	}
-	else {
+	// 保留 DebugObjectMovement 用于调试非锁定物体
+	if (!lockedObject) {
 		DebugObjectMovement();
 	}
 
@@ -144,7 +152,6 @@ void MyGame::UpdateGame(float dt) {
 		Vector3 rayDir;
 
 		rayDir = selectionObject->GetTransform().GetOrientation() * Vector3(0, 0, -1);
-
 		rayPos = selectionObject->GetTransform().GetPosition();
 
 		Ray r = Ray(rayPos, rayDir);
@@ -192,13 +199,7 @@ void MyGame::InitWorld() {
 	world.ClearAndErase();
 	physics.Clear();
 
-	CreatedMixedGrid(2, 2, 3.5f, 3.5f);
-
-	InitGameExamples();
-
-	AddFloorToWorld(Vector3(0, -20, 0));
-
-	testStateObject = AddStateObjectToWorld(Vector3(0, 10, 0)); // Add game object with state machine
+	InitCourierLevel();
 }
 
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
@@ -556,4 +557,105 @@ StateGameObject* MyGame::AddStateObjectToWorld(const Vector3& position) {
 	world.AddGameObject(testStateObject);
 
 	return testStateObject;
+}
+
+// --- 任务 0.2: 关卡搭建核心逻辑 ---
+void MyGame::InitCourierLevel() {
+	// 1. 添加地板
+	// 位置在 Y=-20，大小足够大
+	AddFloorToWorld(Vector3(0, -20, 0));
+
+	// 2. 构建边界墙壁 (Static Cubes, Mass = 0)
+	// 假设游戏区域大概是 200x200 
+	float wallHeight = 20.0f;
+	float boundarySize = 100.0f;
+	float wallThickness = 2.0f;
+
+	// 北墙
+	AddCubeToWorld(Vector3(0, -20 + wallHeight, -boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
+	// 南墙
+	AddCubeToWorld(Vector3(0, -20 + wallHeight, boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
+	// 西墙
+	AddCubeToWorld(Vector3(-boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
+	// 东墙
+	AddCubeToWorld(Vector3(boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
+
+	// 3. 放置内部障碍物 (构成简单的迷宫或路径)
+	// 示例：左侧的一个长条障碍
+	AddCubeToWorld(Vector3(-30, -10, 0), Vector3(2, 10, 40), 0.0f);
+	// 示例：右侧的一个平台
+	AddCubeToWorld(Vector3(40, -15, 20), Vector3(10, 5, 10), 0.0f);
+
+	// 4. 放置终点区域 (Delivery Zone)
+	// 使用绿色的半透明方块表示，无碰撞或设为 Trigger (这里先设为普通静态物体，视觉上区分)
+	Vector3 targetPos = Vector3(60, -19, -60);
+	targetZone = AddCubeToWorld(targetPos, Vector3(10, 1, 10), 0.0f);
+	if (targetZone && targetZone->GetRenderObject()) {
+		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // 绿色半透明
+	}
+
+	// 5. 谜题元素：门和压力板
+	// 压力板 (黄色)
+	pressurePlate = AddCubeToWorld(Vector3(0, -19.5f, 40), Vector3(5, 0.5f, 5), 0.0f);
+	if (pressurePlate && pressurePlate->GetRenderObject()) {
+		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // 黄色
+	}
+
+	// 门 (蓝色，阻挡路径)
+	// 放置在通往终点的必经之路上
+	puzzleDoor = AddCubeToWorld(Vector3(60, -10, -30), Vector3(15, 10, 2), 0.0f);
+	if (puzzleDoor && puzzleDoor->GetRenderObject()) {
+		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // 蓝色
+	}
+
+	// 6. 添加玩家和包裹 (暂时使用简单的球体，后续任务中完善)
+	// --- 任务 0.3 修改: 将返回值存入 playerObject ---
+	playerObject = AddPlayerToWorld(Vector3(-60, 5, 60)); // 稍微抬高一点出生位置
+	GameObject* package = AddBonusToWorld(Vector3(-50, 0, 60)); // 暂时用Bonus代替包裹
+
+	// 锁定相机到玩家
+	LockCameraToObject(playerObject);
+}
+
+// --- 任务 0.3: 玩家控制实现 ---
+void MyGame::PlayerControl() {
+	if (!playerObject) return;
+
+	PhysicsObject* phys = playerObject->GetPhysicsObject();
+	if (!phys) return;
+
+	// 1. 获取相机的方向，确保移动是相对于视角的
+	Matrix4 view = world.GetMainCamera().BuildViewMatrix();
+	Matrix4 camWorld = Matrix::Inverse(view);
+
+	Vector3 rightAxis = Vector3(camWorld.GetColumn(0)); // 相机右方向
+	Vector3 fwdAxis = Vector::Cross(Vector3(0, 1, 0), rightAxis); // 相机前方向 (投影在XZ平面)
+	fwdAxis.y = 0.0f;
+	fwdAxis = Vector::Normalise(fwdAxis);
+	rightAxis.y = 0.0f;
+	rightAxis = Vector::Normalise(rightAxis);
+
+	float forceMagnitude = 50.0f; // 移动力度，需要根据玩家质量调整 (假设质量为2，invMass=0.5)
+
+	// 2. 应用力 (AddForce)
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) {
+		phys->AddForce(fwdAxis * forceMagnitude);
+	}
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) {
+		phys->AddForce(-fwdAxis * forceMagnitude);
+	}
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) {
+		phys->AddForce(-rightAxis * forceMagnitude);
+	}
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) {
+		phys->AddForce(rightAxis * forceMagnitude);
+	}
+
+	// 3. 跳跃 (ApplyImpulse)
+	// 简单的落地检测：只有当垂直速度接近0时才允许跳跃
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
+		if (abs(phys->GetLinearVelocity().y) < 0.1f) {
+			phys->ApplyLinearImpulse(Vector3(0, 20, 0)); // 向上施加瞬时冲量
+		}
+	}
 }
