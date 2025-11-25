@@ -91,19 +91,39 @@ void MyGame::UpdateGame(float dt) {
 		float yaw = world.GetMainCamera().GetYaw();
 		float pitch = world.GetMainCamera().GetPitch();
 
+		// 限制 Pitch，防止相机钻地或翻转过头
+		if (pitch > 30.0f) pitch = 30.0f;
+		if (pitch < -60.0f) pitch = -60.0f;
+
 		// 将欧拉角转换为四元数，计算相机的方向向量
 		Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(pitch, yaw, 0);
-		Vector3 cameraForward = cameraRot * Vector3(0, 0, -1);
+		Vector3 cameraBackward = cameraRot * Vector3(0, 0, 1);
+		//Vector3 cameraForward = cameraRot * Vector3(0, 0, -1);
 
 		// 设定相机距离玩家的距离和高度偏移
 		float dist = 15.0f;
 		Vector3 offset = Vector3(0, 5, 0); // 稍微往上看一点
 
-		// 计算目标位置：玩家位置 - 前方向量 * 距离 + 高度偏移
-		Vector3 cameraPos = playerPos - (cameraForward * dist) + offset;
-		world.GetMainCamera().SetPosition(cameraPos);
+		// --- 相机避障逻辑 (Camera Collision) ---
+		float maxDist = 15.0f; // 理想距离
+		float currentDist = maxDist;
+		// 从玩家头部向相机方向发射射线
+		Vector3 rayOrigin = playerPos + offset;
+		Vector3 rayDir = cameraBackward; // 已经归一化的方向
+		Ray ray(rayOrigin, rayDir);
+		RayCollision collision;
+		// 如果射线在 maxDist 距离内碰到了东西（忽略玩家自己）
+		if (world.Raycast(ray, collision, true, playerObject)) {
+			if (collision.rayDistance < maxDist) {
+				// 将距离设置为碰撞距离减去一点缓冲(0.5)，防止相机穿插在墙里面
+				currentDist = collision.rayDistance - 0.5f;
+				if (currentDist < 0.5f) currentDist = 0.5f; // 最小距离限制
+			}
+		}
 
-		// 可选：简单的相机避障 (Raycast) 可以加在这里，防止相机穿墙
+		// 计算最终位置
+		Vector3 cameraPos = rayOrigin + (cameraBackward * currentDist);
+		world.GetMainCamera().SetPosition(cameraPos);
 	}
 
 	// --- 调试信息显示 ---
@@ -114,7 +134,7 @@ void MyGame::UpdateGame(float dt) {
 	// --- 任务 0.3: 玩家控制 ---
 	// 只有当并不是在自由视角模式(SelectionMode)下，且玩家存在时才允许控制
 	if (!inSelectionMode && playerObject) {
-		PlayerControl();
+		PlayerControl(dt);
 		// 显示操作提示
 		Debug::Print("WASD: Move", Vector2(5, 80), Debug::WHITE);
 		Debug::Print("SPACE: Jump", Vector2(5, 85), Debug::WHITE);
@@ -588,62 +608,113 @@ void MyGame::InitCourierLevel() {
 	// --- 任务 0.3 修改: 将返回值存入 playerObject ---
 	playerObject = AddPlayerToWorld(Vector3(-60, 5, 60)); // 稍微抬高一点出生位置
 	GameObject* package = AddBonusToWorld(Vector3(-50, 0, 60)); // 暂时用Bonus代替包裹
+
+	// --- 任务 1.1 新增: 添加并配置 AI ---
+	// 定义一个简单的矩形巡逻路径
+	std::vector<Vector3> aiPath;
+	aiPath.push_back(Vector3(20, 0, 20));
+	aiPath.push_back(Vector3(20, 0, -20));
+	aiPath.push_back(Vector3(-20, 0, -20));
+	aiPath.push_back(Vector3(-20, 0, 20));
+
+	// 在原点附近生成 AI
+	// 注意：我们需要把返回值强转为 StateGameObject* 才能调用 SetTarget
+	// 为了简单，我们直接在 AddStateObjectToWorld 里改，或者这里手动转型
+	// 由于 AddEnemyToWorld 返回的是 GameObject*，而我们需要 StateGameObject 的功能
+	// 我们这里直接用 AddStateObjectToWorld 来代替 Enemy，因为它是 StateGameObject 类型
+
+	StateGameObject* enemy = AddStateObjectToWorld(Vector3(0, 5, 0));
+	enemy->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // 红色表示敌人
+
+	// 配置 AI
+	enemy->SetPatrolPath(aiPath);
+	enemy->SetTarget(playerObject);
 }
 
-// --- 任务 0.3: 玩家控制实现 ---
-void MyGame::PlayerControl() {
+
+// --- 现代 ARPG 控制实现 ---
+void MyGame::PlayerControl(float dt) {
 	if (!playerObject) return;
 
 	PhysicsObject* phys = playerObject->GetPhysicsObject();
 	if (!phys) return;
 
-	// 获取相机视角方向 (仅取 Y 轴旋转，保证移动在水平面上)
+	Transform& transform = playerObject->GetTransform();
+
+	float forceMagnitude = 60.0f;
+	float maxSpeed = 15.0f;
+	float rotationSpeed = 10.0f; // 转向速度 (Lerp factor)
+
+	// 1. 获取相机的视角 (只取 Yaw)
 	float yaw = world.GetMainCamera().GetYaw();
-	Quaternion rot = Quaternion::EulerAnglesToQuaternion(0, yaw, 0);
+	Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, yaw, 0);
 
-	Vector3 fwdAxis = rot * Vector3(0, 0, -1);
-	Vector3 rightAxis = rot * Vector3(1, 0, 0);
+	// 2. 构建本地输入向量 (Local Input)
+	// W = 前 (0,0,-1), S = 后 (0,0,1), A = 左 (-1,0,0), D = 右 (1,0,0)
+	Vector3 inputDir(0, 0, 0);
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) inputDir.z -= 1;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) inputDir.z += 1;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) inputDir.x -= 1;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) inputDir.x += 1;
 
-	float forceMagnitude = 50.0f; // 移动力度，需要根据玩家质量调整 (假设质量为2，invMass=0.5)
-	bool isMoving = false;
+	bool isMoving = (Vector::LengthSquared(inputDir) > 0);
 
-	// 2. 应用力 (AddForce)
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) {
-		phys->AddForce(fwdAxis * forceMagnitude);
-		isMoving = true;
-	}
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) {
-		phys->AddForce(-fwdAxis * forceMagnitude);
-		isMoving = true;
-	}
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) {
-		phys->AddForce(-rightAxis * forceMagnitude);
-		isMoving = true;
-	}
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) {
-		phys->AddForce(rightAxis * forceMagnitude);
-		isMoving = true;
+	if (isMoving) {
+		// 归一化输入，防止斜向移动速度变快
+		inputDir = Vector::Normalise(inputDir);
+
+		// 3. 计算世界空间的目标移动方向
+		// 将本地输入 (相对于相机) 转换为世界方向
+		Vector3 targetDir = cameraRot * inputDir;
+
+		// 4. 自动转向 (Auto-Rotate)
+		// 计算目标朝向的四元数, 创建一个从 (0,0,0) 看向 targetDir 的旋转
+		Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), -targetDir, Vector3(0, 1, 0));
+		Quaternion targetOrientation(Matrix::Inverse(lookAtMat));
+
+		// 使用 Slerp 平滑插值当前朝向到目标朝向
+		Quaternion currentOrientation = transform.GetOrientation();
+		// --- 修复: 四元数最短路径检查 (Shortest Path Check) ---
+		// 如果两个四元数的点积 < 0，说明它们夹角 > 90度，插值会走长路径（例如 270 度）。
+		// 将其中一个四元数取反，可以保证走短路径（90 度）。
+		float dot = Quaternion::Dot(currentOrientation, targetOrientation);
+		if (dot < 0.0f) {
+			targetOrientation.x = -targetOrientation.x;
+			targetOrientation.y = -targetOrientation.y;
+			targetOrientation.z = -targetOrientation.z;
+			targetOrientation.w = -targetOrientation.w;
+		}
+
+		Quaternion newOrientation = Quaternion::Slerp(currentOrientation, targetOrientation, rotationSpeed * dt);
+
+		transform.SetOrientation(newOrientation);
+		phys->SetAngularVelocity(Vector3(0, 0, 0));
+
+		// 5.Apply Force
+		phys->AddForce(targetDir * forceMagnitude);
 	}
 
-	// --- 改动 4: 减少滑行 (手动刹车) ---
-	// 如果没有按下移动键，且在地面上（简单判断），则施加反向阻尼力
+	// 6. 速度限制 (Speed Limit)
+	Vector3 velocity = phys->GetLinearVelocity();
+	Vector3 planarVelocity(velocity.x, 0, velocity.z);
+
+	if (Vector::Length(planarVelocity) > maxSpeed) {
+		planarVelocity = Vector::Normalise(planarVelocity) * maxSpeed;
+		phys->SetLinearVelocity(Vector3(planarVelocity.x, velocity.y, planarVelocity.z));
+	}
+
+	// 7. 刹车逻辑 (Damping)
 	if (!isMoving) {
-		Vector3 velocity = phys->GetLinearVelocity();
-		// 忽略垂直速度(重力)
-		Vector3 planarVelocity = Vector3(velocity.x, 0, velocity.z);
-
 		if (Vector::Length(planarVelocity) > 0.1f) {
-			// 施加反向力，系数越大停得越快
 			float dampingFactor = 5.0f;
 			phys->AddForce(-planarVelocity * dampingFactor);
 		}
 	}
 
-	// 3. 跳跃 (ApplyImpulse)
-	// 简单的落地检测：只有当垂直速度接近0时才允许跳跃
+	// 8. 跳跃
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
 		if (IsPlayerOnGround()) {
-			phys->ApplyLinearImpulse(Vector3(0, 25, 0)); // 向上施加瞬时冲量
+			phys->ApplyLinearImpulse(Vector3(0, 20, 0));
 		}
 	}
 }

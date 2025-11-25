@@ -48,7 +48,7 @@ namespace NCL {
 			GameObject* pressurePlate = nullptr; // 压力板
 			// --- 任务 0.3 新增: 玩家指针与控制 ---
 			GameObject* playerObject = nullptr;
-			void PlayerControl();
+			void PlayerControl(float dt);
 			// --- 修复跳跃: 射线检测地面 ---
 			bool IsPlayerOnGround();
 
