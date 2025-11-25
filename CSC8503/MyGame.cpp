@@ -21,7 +21,7 @@
 #include "GameTechRendererInterface.h"
 
 #include "Ray.h"
-
+using namespace NCL::Maths::Vector;
 using namespace NCL;
 using namespace CSC8503;
 
@@ -77,23 +77,33 @@ MyGame::~MyGame() {
 }
 
 void MyGame::UpdateGame(float dt) {
+	// 1. 更新相机（处理鼠标旋转输入）
+	// 注意：我们不再使用 LockedObjectMovement 里的强制锁定，而是用下面的 ARPG 逻辑
 	if (!inSelectionMode) {
 		world.GetMainCamera().UpdateCamera(dt);
 	}
-	if (lockedObject != nullptr) {
-		Vector3 objPos = lockedObject->GetTransform().GetPosition();
-		Vector3 camPos = objPos + lockedOffset;
 
-		Matrix4 temp = Matrix::View(camPos, objPos, Vector3(0, 1, 0));
+	// --- 第三人称跟随镜头 ---
+	if (playerObject) {
+		Vector3 playerPos = playerObject->GetTransform().GetPosition();
 
-		Matrix4 modelMat = Matrix::Inverse(temp);
+		// 获取当前相机的朝向（由鼠标控制的 Yaw 和 Pitch）
+		float yaw = world.GetMainCamera().GetYaw();
+		float pitch = world.GetMainCamera().GetPitch();
 
-		Quaternion q(modelMat);
-		Vector3 angles = q.ToEuler(); //nearly there now!
+		// 将欧拉角转换为四元数，计算相机的方向向量
+		Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(pitch, yaw, 0);
+		Vector3 cameraForward = cameraRot * Vector3(0, 0, -1);
 
-		world.GetMainCamera().SetPosition(camPos);
-		world.GetMainCamera().SetPitch(angles.x);
-		world.GetMainCamera().SetYaw(angles.y);
+		// 设定相机距离玩家的距离和高度偏移
+		float dist = 15.0f;
+		Vector3 offset = Vector3(0, 5, 0); // 稍微往上看一点
+
+		// 计算目标位置：玩家位置 - 前方向量 * 距离 + 高度偏移
+		Vector3 cameraPos = playerPos - (cameraForward * dist) + offset;
+		world.GetMainCamera().SetPosition(cameraPos);
+
+		// 可选：简单的相机避障 (Raycast) 可以加在这里，防止相机穿墙
 	}
 
 	// --- 调试信息显示 ---
@@ -141,8 +151,8 @@ void MyGame::UpdateGame(float dt) {
 		world.ShuffleObjects(false);
 	}
 
-	// 保留 DebugObjectMovement 用于调试非锁定物体
-	if (!lockedObject) {
+	// 自由视角模式下的调试移动
+	if (inSelectionMode && selectionObject) {
 		DebugObjectMovement();
 	}
 
@@ -280,10 +290,19 @@ GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
 		.SetPosition(position);
 
 	character->SetRenderObject(new RenderObject(character->GetTransform(), catMesh, notexMaterial));
-	character->SetPhysicsObject(new PhysicsObject(character->GetTransform(), character->GetBoundingVolume()));
 
-	character->GetPhysicsObject()->SetInverseMass(inverseMass);
-	character->GetPhysicsObject()->InitSphereInertia();
+	// --- 改动 1: 给玩家设置特殊颜色 (例如青色 Cyan) ---
+	character->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1));
+
+	PhysicsObject* physicsObj = new PhysicsObject(character->GetTransform(), character->GetBoundingVolume());
+	physicsObj->SetInverseMass(inverseMass);
+	physicsObj->InitSphereInertia();
+
+	// --- 改动 3: 取消弹跳 ---
+	physicsObj->SetElasticity(0.0f); // 设为 0，落地不反弹
+	// physicsObj->SetFriction(0.8f); // 可以增加摩擦力，但这通常用于物体之间的接触计算，这里主要靠我们手写的刹车逻辑
+
+	character->SetPhysicsObject(physicsObj);
 
 	world.AddGameObject(character);
 
@@ -332,49 +351,6 @@ GameObject* MyGame::AddBonusToWorld(const Vector3& position) {
 	world.AddGameObject(apple);
 
 	return apple;
-}
-
-void MyGame::InitGameExamples() {
-	AddPlayerToWorld(Vector3(0, 5, 0));
-	AddEnemyToWorld(Vector3(5, 5, 0));
-	AddBonusToWorld(Vector3(10, 5, 0));
-}
-
-void MyGame::CreateSphereGrid(int numRows, int numCols, float rowSpacing, float colSpacing, float radius) {
-	for (int x = 0; x < numCols; ++x) {
-		for (int z = 0; z < numRows; ++z) {
-			Vector3 position = Vector3(x * colSpacing, 10.0f, z * rowSpacing);
-			AddSphereToWorld(position, radius, 1.0f);
-		}
-	}
-	AddFloorToWorld(Vector3(0, -2, 0));
-}
-
-void MyGame::CreatedMixedGrid(int numRows, int numCols, float rowSpacing, float colSpacing) {
-	float sphereRadius = 1.0f;
-	Vector3 cubeDims = Vector3(1, 1, 1);
-
-	for (int x = 0; x < numCols; ++x) {
-		for (int z = 0; z < numRows; ++z) {
-			Vector3 position = Vector3(x * colSpacing, 10.0f, z * rowSpacing);
-
-			if (rand() % 2) {
-				AddCubeToWorld(position, cubeDims);
-			}
-			else {
-				AddSphereToWorld(position, sphereRadius);
-			}
-		}
-	}
-}
-
-void MyGame::CreateAABBGrid(int numRows, int numCols, float rowSpacing, float colSpacing, const Vector3& cubeDims) {
-	for (int x = 1; x < numCols + 1; ++x) {
-		for (int z = 1; z < numRows + 1; ++z) {
-			Vector3 position = Vector3(x * colSpacing, 10.0f, z * rowSpacing);
-			AddCubeToWorld(position, cubeDims, 1.0f);
-		}
-	}
 }
 
 bool MyGame::SelectObject() {
@@ -612,9 +588,6 @@ void MyGame::InitCourierLevel() {
 	// --- 任务 0.3 修改: 将返回值存入 playerObject ---
 	playerObject = AddPlayerToWorld(Vector3(-60, 5, 60)); // 稍微抬高一点出生位置
 	GameObject* package = AddBonusToWorld(Vector3(-50, 0, 60)); // 暂时用Bonus代替包裹
-
-	// 锁定相机到玩家
-	LockCameraToObject(playerObject);
 }
 
 // --- 任务 0.3: 玩家控制实现 ---
@@ -624,38 +597,78 @@ void MyGame::PlayerControl() {
 	PhysicsObject* phys = playerObject->GetPhysicsObject();
 	if (!phys) return;
 
-	// 1. 获取相机的方向，确保移动是相对于视角的
-	Matrix4 view = world.GetMainCamera().BuildViewMatrix();
-	Matrix4 camWorld = Matrix::Inverse(view);
+	// 获取相机视角方向 (仅取 Y 轴旋转，保证移动在水平面上)
+	float yaw = world.GetMainCamera().GetYaw();
+	Quaternion rot = Quaternion::EulerAnglesToQuaternion(0, yaw, 0);
 
-	Vector3 rightAxis = Vector3(camWorld.GetColumn(0)); // 相机右方向
-	Vector3 fwdAxis = Vector::Cross(Vector3(0, 1, 0), rightAxis); // 相机前方向 (投影在XZ平面)
-	fwdAxis.y = 0.0f;
-	fwdAxis = Vector::Normalise(fwdAxis);
-	rightAxis.y = 0.0f;
-	rightAxis = Vector::Normalise(rightAxis);
+	Vector3 fwdAxis = rot * Vector3(0, 0, -1);
+	Vector3 rightAxis = rot * Vector3(1, 0, 0);
 
 	float forceMagnitude = 50.0f; // 移动力度，需要根据玩家质量调整 (假设质量为2，invMass=0.5)
+	bool isMoving = false;
 
 	// 2. 应用力 (AddForce)
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) {
 		phys->AddForce(fwdAxis * forceMagnitude);
+		isMoving = true;
 	}
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) {
 		phys->AddForce(-fwdAxis * forceMagnitude);
+		isMoving = true;
 	}
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) {
 		phys->AddForce(-rightAxis * forceMagnitude);
+		isMoving = true;
 	}
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) {
 		phys->AddForce(rightAxis * forceMagnitude);
+		isMoving = true;
+	}
+
+	// --- 改动 4: 减少滑行 (手动刹车) ---
+	// 如果没有按下移动键，且在地面上（简单判断），则施加反向阻尼力
+	if (!isMoving) {
+		Vector3 velocity = phys->GetLinearVelocity();
+		// 忽略垂直速度(重力)
+		Vector3 planarVelocity = Vector3(velocity.x, 0, velocity.z);
+
+		if (Vector::Length(planarVelocity) > 0.1f) {
+			// 施加反向力，系数越大停得越快
+			float dampingFactor = 5.0f;
+			phys->AddForce(-planarVelocity * dampingFactor);
+		}
 	}
 
 	// 3. 跳跃 (ApplyImpulse)
 	// 简单的落地检测：只有当垂直速度接近0时才允许跳跃
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-		if (abs(phys->GetLinearVelocity().y) < 0.1f) {
-			phys->ApplyLinearImpulse(Vector3(0, 20, 0)); // 向上施加瞬时冲量
+		if (IsPlayerOnGround()) {
+			phys->ApplyLinearImpulse(Vector3(0, 25, 0)); // 向上施加瞬时冲量
 		}
 	}
+}
+
+// --- 使用射线检测地面 ---
+bool MyGame::IsPlayerOnGround() {
+	if (!playerObject) return false;
+
+	// 获取玩家位置
+	Vector3 playerPos = playerObject->GetTransform().GetPosition();
+
+	// 向下发射射线
+	Ray ray(playerPos, Vector3(0, -1, 0));
+	RayCollision collision;
+
+	// 玩家半径是 1.0 (在 AddPlayerToWorld 里定义的)
+	// 我们检测距离稍微大一点点 (1.1)，允许轻微的误差或斜坡检测
+	float groundCheckDist = 1.1f;
+
+	// 使用 Raycast，记得传入 playerObject 以忽略自身
+	if (world.Raycast(ray, collision, true, playerObject)) {
+		if (collision.rayDistance < groundCheckDist) {
+			return true; // 碰到了地面或物体
+		}
+	}
+
+	return false;
 }

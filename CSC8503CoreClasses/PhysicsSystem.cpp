@@ -245,15 +245,13 @@ void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, Collis
 	}
 	
 	// Separate them out using projection
-	//transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA -> GetInverseMass() / totalMass)));
-	//transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB -> GetInverseMass() / totalMass)));
-	// Separate them out using projection
+	transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA->GetInverseMass() / totalMass)));
+	transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB->GetInverseMass() / totalMass)));
+
 
 	float penetrationSlop = 0.002f;
 	// 2. 引入 Bias (位置修正系数)：范围 0.0 ~ 1.0
-	// 0.1 表示每帧只修 10% 的穿透（很软，像泥巴）
-	// 0.8 表示每帧修 80% 的穿透（硬，但不会太弹）
-	// 推荐 0.4f 到 0.8f 之间测试
+	// 0.1 表示每帧只修 10% 的穿透（很软，像泥巴, 0.8 表示每帧修 80% 的穿透（硬，但不会太弹）
 	float positionCorrectionBias = 0.4f;
 
 	if (p.penetration > penetrationSlop) {
@@ -283,14 +281,21 @@ void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, Collis
 	Vector3 contactVelocity = fullVelocityB - fullVelocityA;
 
 	float impulseForce = Vector::Dot(contactVelocity, p.normal);
+
+	// 如果物体已经在互相远离(impulseForce > 0)，比如跳跃时，就不要施加任何碰撞冲量！
+	if (impulseForce > 0) {
+		return;
+	}
+
 	// now to work out the effect of inertia ....
 	Vector3 inertiaA = Vector::Cross(physA -> GetInertiaTensor() * Vector::Cross(relativeA, p.normal), relativeA);
 	Vector3 inertiaB = Vector::Cross(physB -> GetInertiaTensor() * Vector::Cross(relativeB, p.normal), relativeB);
 	float angularEffect = Vector::Dot(inertiaA + inertiaB, p.normal);
 	
-	float cRestitution = 0.66f; // disperse some kinectic energy
+	// --- 使用物理对象的弹性属性 ---
+	float cRestitution = physA->GetElasticity() * physB->GetElasticity();
 	// 如果相对速度非常小（主要由重力引起），则视为静止接触，不进行反弹
-	if (abs(impulseForce) < 1.0f) { // 这里的 2.0f 是一个经验阈值，你可以根据重力大小调整
+	if (abs(impulseForce) < 1.0f) { // 可以根据重力大小调整
 		cRestitution = 0.0f;
 	}
 

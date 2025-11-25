@@ -74,6 +74,24 @@ namespace NCL {
 				return inverseInteriaTensor;
 			}
 
+			// --- Getter/Setter for Gameplay Tweaks ---
+			void SetElasticity(float newElasticity) {
+				elasticity = newElasticity;
+			}
+
+			// 新增 Getter，供 PhysicsSystem 调用
+			float GetElasticity() const {
+				return elasticity;
+			}
+
+			void SetFriction(float newFriction) {
+				friction = newFriction;
+			}
+
+			float GetFriction() const {
+				return friction;
+			}
+
 		protected:
 			const CollisionVolume* volume;
 			Transform&		transform;

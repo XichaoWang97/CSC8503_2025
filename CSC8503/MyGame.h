@@ -49,6 +49,8 @@ namespace NCL {
 			// --- 任务 0.3 新增: 玩家指针与控制 ---
 			GameObject* playerObject = nullptr;
 			void PlayerControl();
+			// --- 修复跳跃: 射线检测地面 ---
+			bool IsPlayerOnGround();
 
 			// original code below
 			StateGameObject* AddStateObjectToWorld(const Vector3& position);
@@ -95,14 +97,7 @@ namespace NCL {
 
 			void BridgeConstraintTest();
 
-			// Not used ---------------------------------------------------------------------------------------------
-			
-
-			void InitGameExamples();
-
-			void CreateSphereGrid(int numRows, int numCols, float rowSpacing, float colSpacing, float radius);
-			void CreatedMixedGrid(int numRows, int numCols, float rowSpacing, float colSpacing);
-			void CreateAABBGrid(int numRows, int numCols, float rowSpacing, float colSpacing, const NCL::Maths::Vector3& cubeDims);
+			// ---------------------------------------------------------------------------------------------
 
 			bool SelectObject();
 			void MoveSelectedObject();
