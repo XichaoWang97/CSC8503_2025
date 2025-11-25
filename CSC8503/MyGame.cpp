@@ -126,11 +126,74 @@ void MyGame::UpdateGame(float dt) {
 		world.GetMainCamera().SetPosition(cameraPos);
 	}
 
-	// --- 调试信息显示 ---
-	// 如果有终点，在此处画个标记或者文字
+	// --- 调试信息显示 --- 如果有终点，在此处画个标记或者文字
 	if (targetZone) {
 		Debug::Print("Destination", Vector2(80, 20), Debug::GREEN);
 	}
+
+	// --- 任务 1.4: 显示包裹血量 ---
+	if (packageObject) {
+		float health = packageObject->GetHealth();
+		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
+		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(5, 10), col);
+
+		if (packageObject->IsBroken()) {
+			Debug::Print("GAME OVER: PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
+		}
+	}
+
+	// --- 任务 1.5: 谜题逻辑 (压力板与门) ---
+	if (puzzleDoor && pressurePlate) {
+		bool isTriggered = false;
+		Vector3 platePos = pressurePlate->GetTransform().GetPosition();
+		// 压力板区域大小 (根据 InitCourierLevel 中设置的大小适当放宽)
+		// 压力板尺寸是 5x0.5x5 (HalfDims), 我们在 Y 轴上放宽一点以便检测站在上面的物体
+		Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
+
+		// 简单的 AABB 包含检测 lambda
+		auto CheckTrigger = [&](GameObject* obj) {
+			if (!obj) return false;
+			Vector3 pos = obj->GetTransform().GetPosition();
+			// 检查 obj 是否在压力板的 AABB 范围内
+			return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
+				pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
+				pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
+			};
+
+		// 只要玩家或者包裹在上面，就算触发
+		if (CheckTrigger(playerObject) || CheckTrigger(packageObject)) {
+			isTriggered = true;
+		}
+
+		// --- 门的动作 ---
+		Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
+		// 门初始在 Y=-10 (地面上), 打开时移动到 Y=-30 (沉入地下)
+		float targetY = isTriggered ? -30.0f : -10.0f;
+		float doorSpeed = 20.0f;
+
+		if (abs(doorPos.y - targetY) > 0.01f) {
+			if (doorPos.y > targetY) {
+				doorPos.y -= doorSpeed * dt;
+				if (doorPos.y < targetY) doorPos.y = targetY;
+			}
+			else {
+				doorPos.y += doorSpeed * dt;
+				if (doorPos.y > targetY) doorPos.y = targetY;
+			}
+			puzzleDoor->GetTransform().SetPosition(doorPos);
+		}
+
+		// --- 视觉反馈 ---
+		if (isTriggered) {
+			pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // 激活变绿
+			Debug::Print("Gate Open!", Vector2(45, 80), Debug::GREEN);
+		}
+		else {
+			pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // 默认黄色
+			Debug::Print("Gate Closed - Find the Plate", Vector2(30, 80), Debug::YELLOW);
+		}
+	}
+
 	// --- 任务 0.3: 玩家控制 ---
 	// 只有当并不是在自由视角模式(SelectionMode)下，且玩家存在时才允许控制
 	if (!inSelectionMode && playerObject) {
@@ -310,9 +373,7 @@ GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
 		.SetPosition(position);
 
 	character->SetRenderObject(new RenderObject(character->GetTransform(), catMesh, notexMaterial));
-
-	// --- 改动 1: 给玩家设置特殊颜色 (例如青色 Cyan) ---
-	character->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1));
+	character->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1)); // 给玩家设置特殊颜色 (例如青色 Cyan)
 
 	PhysicsObject* physicsObj = new PhysicsObject(character->GetTransform(), character->GetBoundingVolume());
 	physicsObj->SetInverseMass(inverseMass);
@@ -329,11 +390,11 @@ GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
 	return character;
 }
 
-GameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
+StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	float meshSize = 3.0f;
 	float inverseMass = 0.5f;
 
-	GameObject* character = new GameObject("enemy");
+	StateGameObject* character = new StateGameObject("enemy");
 
 	AABBVolume* volume = new AABBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
 	character->SetBoundingVolume(volume);
@@ -343,34 +404,18 @@ GameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 		.SetPosition(position);
 
 	character->SetRenderObject(new RenderObject(character->GetTransform(), enemyMesh, notexMaterial));
-	character->SetPhysicsObject(new PhysicsObject(character->GetTransform(), character->GetBoundingVolume()));
+	character->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red color ENEMY
 
-	character->GetPhysicsObject()->SetInverseMass(inverseMass);
-	character->GetPhysicsObject()->InitSphereInertia();
+	PhysicsObject* physicsObj = new PhysicsObject(character->GetTransform(), character->GetBoundingVolume());
+
+	physicsObj->SetInverseMass(inverseMass);
+	physicsObj->InitSphereInertia();
+
+	character->SetPhysicsObject(physicsObj);
 
 	world.AddGameObject(character);
 
 	return character;
-}
-
-GameObject* MyGame::AddBonusToWorld(const Vector3& position) {
-	GameObject* apple = new GameObject("bonus");
-
-	SphereVolume* volume = new SphereVolume(0.5f);
-	apple->SetBoundingVolume(volume);
-	apple->GetTransform()
-		.SetScale(Vector3(2, 2, 2))
-		.SetPosition(position);
-
-	apple->SetRenderObject(new RenderObject(apple->GetTransform(), bonusMesh, glassMaterial));
-	apple->SetPhysicsObject(new PhysicsObject(apple->GetTransform(), apple->GetBoundingVolume()));
-
-	apple->GetPhysicsObject()->SetInverseMass(1.0f);
-	apple->GetPhysicsObject()->InitSphereInertia();
-
-	world.AddGameObject(apple);
-
-	return apple;
 }
 
 bool MyGame::SelectObject() {
@@ -535,26 +580,6 @@ void MyGame::BridgeConstraintTest() {
 	world.AddConstraint(constraint);
 }
 
-StateGameObject* MyGame::AddStateObjectToWorld(const Vector3& position) {
-	testStateObject = new StateGameObject("stateGameObj");
-
-	SphereVolume* volume = new SphereVolume(1.0f);
-	testStateObject->SetBoundingVolume(volume);
-	testStateObject->GetTransform()
-		.SetScale(Vector3(1, 1, 1))
-		.SetPosition(position);
-
-	testStateObject->SetRenderObject(new RenderObject(testStateObject->GetTransform(), catMesh, notexMaterial));
-	testStateObject->SetPhysicsObject(new PhysicsObject(testStateObject->GetTransform(), testStateObject->GetBoundingVolume()));
-
-	testStateObject->GetPhysicsObject()->SetInverseMass(0.5f);
-	testStateObject->GetPhysicsObject()->InitSphereInertia();
-
-	world.AddGameObject(testStateObject);
-
-	return testStateObject;
-}
-
 // --- 任务 0.2: 关卡搭建核心逻辑 ---
 void MyGame::InitCourierLevel() {
 	// 1. 添加地板
@@ -567,13 +592,10 @@ void MyGame::InitCourierLevel() {
 	float boundarySize = 100.0f;
 	float wallThickness = 2.0f;
 
-	// 北墙
+	// 北南西东4墙
 	AddCubeToWorld(Vector3(0, -20 + wallHeight, -boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
-	// 南墙
 	AddCubeToWorld(Vector3(0, -20 + wallHeight, boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
-	// 西墙
 	AddCubeToWorld(Vector3(-boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
-	// 东墙
 	AddCubeToWorld(Vector3(boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
 
 	// 3. 放置内部障碍物 (构成简单的迷宫或路径)
@@ -584,7 +606,7 @@ void MyGame::InitCourierLevel() {
 
 	// 4. 放置终点区域 (Delivery Zone)
 	// 使用绿色的半透明方块表示，无碰撞或设为 Trigger (这里先设为普通静态物体，视觉上区分)
-	Vector3 targetPos = Vector3(60, -19, -60);
+	Vector3 targetPos = Vector3(60, -18, -60);
 	targetZone = AddCubeToWorld(targetPos, Vector3(10, 1, 10), 0.0f);
 	if (targetZone && targetZone->GetRenderObject()) {
 		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // 绿色半透明
@@ -592,7 +614,7 @@ void MyGame::InitCourierLevel() {
 
 	// 5. 谜题元素：门和压力板
 	// 压力板 (黄色)
-	pressurePlate = AddCubeToWorld(Vector3(0, -19.5f, 40), Vector3(5, 0.5f, 5), 0.0f);
+	pressurePlate = AddCubeToWorld(Vector3(0, -18, 40), Vector3(5, 0.5f, 5), 0.0f);
 	if (pressurePlate && pressurePlate->GetRenderObject()) {
 		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // 黄色
 	}
@@ -604,33 +626,32 @@ void MyGame::InitCourierLevel() {
 		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // 蓝色
 	}
 
-	// 6. 添加玩家和包裹 (暂时使用简单的球体，后续任务中完善)
 	// --- 任务 0.3 修改: 将返回值存入 playerObject ---
-	playerObject = AddPlayerToWorld(Vector3(-60, 5, 60)); // 稍微抬高一点出生位置
-	GameObject* package = AddBonusToWorld(Vector3(-50, 0, 60)); // 暂时用Bonus代替包裹
+	Vector3 playerStartPos = Vector3(-60, 5, 60);
+	playerObject = AddPlayerToWorld(playerStartPos);
+	// --- 任务 1.4: 使用 FragileGameObject 创建包裹 ---
+	packageObject = AddFragilePackageToWorld(Vector3(-50, 2, 60)); // 放低一点，防止落地直接摔坏
 
-	// --- 任务 1.1 新增: 添加并配置 AI ---
-	// 定义一个简单的矩形巡逻路径
+	// --- AI 设置 ---
+	Vector3 enemyStartPos = Vector3(0, 0, 0);
 	std::vector<Vector3> aiPath;
-	aiPath.push_back(Vector3(20, 0, 20));
-	aiPath.push_back(Vector3(20, 0, -20));
-	aiPath.push_back(Vector3(-20, 0, -20));
-	aiPath.push_back(Vector3(-20, 0, 20));
+	float pathY = -16.0f;
+	aiPath.push_back(Vector3(20, pathY, 20));
+	aiPath.push_back(Vector3(20, pathY, -20));
+	aiPath.push_back(Vector3(-20, pathY, -20));
+	aiPath.push_back(Vector3(-20, pathY, 20));
 
-	// 在原点附近生成 AI
-	// 注意：我们需要把返回值强转为 StateGameObject* 才能调用 SetTarget
-	// 为了简单，我们直接在 AddStateObjectToWorld 里改，或者这里手动转型
-	// 由于 AddEnemyToWorld 返回的是 GameObject*，而我们需要 StateGameObject 的功能
-	// 我们这里直接用 AddStateObjectToWorld 来代替 Enemy，因为它是 StateGameObject 类型
+	// 使用更新后的 AddEnemyToWorld
+	StateGameObject* enemy = AddEnemyToWorld(enemyStartPos);
 
-	StateGameObject* enemy = AddStateObjectToWorld(Vector3(0, 5, 0));
-	enemy->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // 红色表示敌人
-
-	// 配置 AI
 	enemy->SetPatrolPath(aiPath);
 	enemy->SetTarget(playerObject);
-}
+	// --- 任务 1.2 修改: 注入 GameWorld ---
+	enemy->SetGameWorld(&world);
 
+	// --- 任务 1.3: 设置重置点 ---
+	enemy->SetResetPoint(playerStartPos);
+}
 
 // --- 现代 ARPG 控制实现 ---
 void MyGame::PlayerControl(float dt) {
@@ -742,4 +763,27 @@ bool MyGame::IsPlayerOnGround() {
 	}
 
 	return false;
+}
+
+// --- 任务 1.4: 实现包裹创建函数 ---
+FragileGameObject* MyGame::AddFragilePackageToWorld(const Vector3& position) {
+	FragileGameObject* package = new FragileGameObject("FragilePackage");
+
+	SphereVolume* volume = new SphereVolume(1.0f);
+	package->SetBoundingVolume(volume);
+	package->GetTransform().SetScale(Vector3(1, 1, 1)).SetPosition(position);
+
+	package->SetRenderObject(new RenderObject(package->GetTransform(), bonusMesh, glassMaterial));
+	package->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // 初始蓝色 (满血)
+
+	PhysicsObject* physicsObj = new PhysicsObject(package->GetTransform(), package->GetBoundingVolume());
+	physicsObj->SetInverseMass(1.0f);
+	physicsObj->InitSphereInertia();
+	physicsObj->SetElasticity(0.3f); // 低弹性，防止弹得太厉害
+
+	package->SetPhysicsObject(physicsObj);
+
+	world.AddGameObject(package);
+
+	return package;
 }

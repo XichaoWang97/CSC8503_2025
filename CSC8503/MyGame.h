@@ -2,7 +2,7 @@
 #pragma once
 #include "RenderObject.h"
 #include "StateGameObject.h"
-
+#include "FragileGameObject.h"
 namespace NCL {
 	class Controller;
 
@@ -39,8 +39,7 @@ namespace NCL {
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f);
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f);
-			GameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
-			GameObject* AddBonusToWorld(const NCL::Maths::Vector3& position);
+			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
 
 			// --- 任务 0.2 新增: 关卡特定对象指针 ---
 			GameObject* targetZone = nullptr;   // 终点区域
@@ -51,10 +50,13 @@ namespace NCL {
 			void PlayerControl(float dt);
 			// --- 修复跳跃: 射线检测地面 ---
 			bool IsPlayerOnGround();
+			// --- 任务 1.4 新增: 创建易碎包裹 ---
+			FragileGameObject* AddFragilePackageToWorld(const NCL::Maths::Vector3& position);
+			FragileGameObject* packageObject = nullptr;
 
 			// original code below
-			StateGameObject* AddStateObjectToWorld(const Vector3& position);
-			StateGameObject* testStateObject;
+			//StateGameObject* AddStateObjectToWorld(const Vector3& position);
+			//StateGameObject* testStateObject;
 			
 			GameWorld& world;
 			GameTechRendererInterface& renderer;

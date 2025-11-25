@@ -4,7 +4,8 @@
 #include "State.h"
 #include "PhysicsObject.h"
 #include "Debug.h"
-
+#include "GameWorld.h"
+#include "Ray.h"
 using namespace NCL;
 using namespace CSC8503;
 
@@ -27,22 +28,17 @@ StateGameObject::StateGameObject(const std::string& objectName) {
 	stateMachine->AddState(statePatrol);
 	stateMachine->AddState(stateChase);
 
-	// 2. 创建转换 (Transitions)
 
-	// 条件 A: Patrol -> Chase (如果玩家距离 < 15.0f)
-	// 注意：任务 1.2 会把这里升级为射线检测
+	// --- 任务 1.2 修改: 使用视线检测作为转换条件 ---
+	// Patrol -> Chase
 	stateMachine->AddTransition(new StateTransition(statePatrol, stateChase, [&]()->bool {
-		if (!playerTarget) return false;
-		float dist = Vector::Length(playerTarget->GetTransform().GetPosition() - this->GetTransform().GetPosition());
-		return dist < 15.0f;
+		return this->CanSeeTarget();
 		})
 	);
 
-	// 条件 B: Chase -> Patrol (如果玩家距离 > 20.0f，追丢了)
+	// Chase -> Patrol (如果看不见或者距离太远)
 	stateMachine->AddTransition(new StateTransition(stateChase, statePatrol, [&]()->bool {
-		if (!playerTarget) return true; // 没目标就回去巡逻
-		float dist = Vector::Length(playerTarget->GetTransform().GetPosition() - this->GetTransform().GetPosition());
-		return dist > 20.0f;
+		return !this->CanSeeTarget();
 		})
 	);
 }
@@ -53,6 +49,22 @@ StateGameObject::~StateGameObject() {
 
 void StateGameObject::Update(float dt) {
 	stateMachine->Update(dt);
+}
+
+// --- 任务 1.3 修改: 使用物理碰撞回调 ---
+void StateGameObject::OnCollisionBegin(GameObject* otherObject) {
+	// 只有当撞到的对象是我们的目标（玩家）时，才触发逻辑
+	if (otherObject == playerTarget) {
+		// 重置玩家位置
+		playerTarget->GetTransform().SetPosition(Vector3(-60, 5, 60));
+
+		// 清零玩家速度
+		if (playerTarget->GetPhysicsObject()) {
+			playerTarget->GetPhysicsObject()->ClearForces();
+			playerTarget->GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+			playerTarget->GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
+		}
+	}
 }
 
 // --- 状态行为实现 ---
@@ -93,18 +105,63 @@ void StateGameObject::MoveTo(Vector3 targetPos, float speed, float dt) {
 	Vector3 pos = GetTransform().GetPosition();
 	Vector3 direction = targetPos - pos;
 
-	// 忽略高度差异，只在水平面上移动
 	direction.y = 0;
 
 	if (Vector::Length(direction) > 0.1f) {
 		Vector3 velocity = Vector::Normalise(direction) * speed;
-		GetPhysicsObject()->SetLinearVelocity(velocity);
 
-		// 可选：让 AI 面向移动方向 (如果想做的好看点)
-		// Matrix4 lookAt = Matrix::View(Vector3(0,0,0), -velocity, Vector3(0,1,0));
-		// GetTransform().SetOrientation(Quaternion(Matrix::Inverse(lookAt)));
+		// --- 修复：保留当前的垂直速度 (重力) ---
+		Vector3 currentVelocity = GetPhysicsObject()->GetLinearVelocity();
+		velocity.y = currentVelocity.y;
+
+		GetPhysicsObject()->SetLinearVelocity(velocity);
 	}
 	else {
-		GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+		// 停止时也保留重力
+		Vector3 currentVelocity = GetPhysicsObject()->GetLinearVelocity();
+		GetPhysicsObject()->SetLinearVelocity(Vector3(0, currentVelocity.y, 0));
 	}
+}
+
+// --- 任务 1.2: 视线检测实现 ---
+bool StateGameObject::CanSeeTarget() {
+	if (!playerTarget || !gameWorld) return false;
+
+	Vector3 aiPos = GetTransform().GetPosition();
+	Vector3 playerPos = playerTarget->GetTransform().GetPosition();
+
+	// 距离检测
+	float dist = Vector::Length(playerPos - aiPos);
+	if (dist > 30.0f) { // 增加视野距离
+		return false;
+	}
+
+	// 射线检测
+	// 从 AI 中心稍微偏上一点的位置发射，指向玩家中心
+	// 避免射线直接打到地面
+	Vector3 rayOrigin = aiPos + Vector3(0, 2.0f, 0);
+	Vector3 targetPoint = playerPos + Vector3(0, 1.0f, 0); // 瞄准玩家胸部
+
+	Vector3 rayDir = targetPoint - rayOrigin;
+	rayDir = Vector::Normalise(rayDir); // Ray 需要归一化的方向
+
+	Ray ray(rayOrigin, rayDir);
+	RayCollision collision;
+
+	if (gameWorld->Raycast(ray, collision, true, this)) {
+		// 调试：画出射线
+		// 如果打中玩家，画绿线；否则画红线
+		if (collision.node == playerTarget) {
+			Debug::DrawLine(rayOrigin, collision.collidedAt, Vector4(0, 1, 0, 1)); // 绿色：看见了
+			return true;
+		}
+		else {
+			Debug::DrawLine(rayOrigin, collision.collidedAt, Vector4(1, 0, 0, 1)); // 红色：被挡住
+			// 这里可以打印一下到底打到了什么
+			// std::cout << "Ray hit: " << ((GameObject*)collision.node)->GetName() << std::endl;
+			return false;
+		}
+	}
+
+	return false;
 }
