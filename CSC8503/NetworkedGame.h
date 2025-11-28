@@ -62,5 +62,12 @@ namespace NCL::CSC8503 {
 		std::map<int, NetworkPlayer*> serverPlayers;
 		NetworkPlayer* localPlayer; // 客户端本地玩家
 		int myPlayerID; // 客户端 ID
+
+		// --- 任务 2.4 新增: 双人合作机制 ---
+		GameObject* localHeavyPackage = nullptr; // 指向场景中的重包裹
+		void ServerUpdateCoopMechanic(float dt); // 服务器专用：检测玩家距离并调整包裹质量
+
+		// 辅助函数：生成网络物体（非玩家）
+		GameObject* SpawnNetworkedObject(int id, Vector3 pos, Vector3 scale, float inverseMass);
 	};
 }

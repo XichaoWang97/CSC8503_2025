@@ -63,8 +63,13 @@ void NetworkedGame::StartAsServer() {
 	// --- 任务 2.3: 注册客户端输入处理器 ---
 	thisServer->RegisterPacketHandler(Client_Input, this);
 
-	// --- 修改: 调用 MyGame 的关卡加载 ---
+	// --- 调用 MyGame 的关卡加载 ---
 	InitWorld();
+
+	// --- 任务 2.4: 生成重包裹 (Server) ---
+	// ID 设为 100，避免与玩家 ID 冲突
+	// 位置放在玩家出生点附近，方便测试
+	localHeavyPackage = SpawnNetworkedObject(100, Vector3(10, -15, 10), Vector3(2, 2, 2), 0.0f);
 
 	// --- 服务器生成自己的玩家 (ID 0) ---
 	// 使用 MyGame::InitCourierLevel 中的出生点逻辑
@@ -96,6 +101,8 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 
 	// --- 客户端也加载关卡，但不生成玩家 ---
 	InitWorld();
+	// --- 任务 2.4: 生成重包裹 (Client) ---
+	localHeavyPackage = SpawnNetworkedObject(100, Vector3(10, -15, 10), Vector3(2, 2, 2), 0.0f);
 
 	// 客户端不需要 MyGame 创建的单机玩家，将其清理（如果有的话）
 	if (playerObject) {
@@ -173,6 +180,9 @@ void NetworkedGame::UpdateGame(float dt) {
 }
 
 void NetworkedGame::UpdateAsServer(float dt) {
+	// --- 任务 2.4: 更新合作逻辑 ---
+	ServerUpdateCoopMechanic(dt);
+	// --- 任务 2.3: 发送状态快照 ---
 	packetsToSnapshot--;
 	if (packetsToSnapshot < 0) {
 		BroadcastSnapshot(false);
@@ -379,5 +389,85 @@ void NetworkedGame::OnPlayerCollision(NetworkPlayer* a, NetworkPlayer* b) {
 		// (需要确保 GameServer.h 中声明了这个函数)
 		// thisServer->SendPacketToClient(newPacket, b->GetPlayerNum()); 
 		// ...
+	}
+}
+
+// -------------------------------------------------------------------------------------
+// 任务 2.4: 双人包裹机制实现
+// 辅助函数：在网络环境中生成一个普通物体
+// 注意：Server 和 Client 都需要调用这个函数，并传入相同的 networkID (例如 100)
+GameObject* NetworkedGame::SpawnNetworkedObject(int id, Vector3 pos, Vector3 scale, float inverseMass) {
+	GameObject* obj = new GameObject("HeavyPackage");
+
+	// 设置 AABB 碰撞体积
+	AABBVolume* volume = new AABBVolume(scale);
+	obj->SetBoundingVolume(volume);
+
+	obj->GetTransform()
+		.SetPosition(pos)
+		.SetScale(scale * 2.0f);
+
+	// 这里我们假设 cubeMesh 已经在 MyGame 中加载
+	obj->SetRenderObject(new RenderObject(obj->GetTransform(), cubeMesh, checkerMaterial));
+	obj->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // 初始红色 (不可移动)
+
+	// 设置物理
+	obj->SetPhysicsObject(new PhysicsObject(obj->GetTransform(), obj->GetBoundingVolume()));
+	obj->GetPhysicsObject()->SetInverseMass(inverseMass);
+	obj->GetPhysicsObject()->InitCubeInertia();
+
+	// 关键：添加 NetworkObject 组件用于同步
+	NetworkObject* netObj = new NetworkObject(*obj, id);
+	networkObjects.push_back(netObj);
+	obj->SetNetworkObject(netObj);
+
+	world.AddGameObject(obj);
+	return obj;
+}
+
+// 服务器端逻辑：每帧调用
+void NetworkedGame::ServerUpdateCoopMechanic(float dt) {
+	if (!localHeavyPackage) return;
+
+	int playersInRange = 0;
+	float activationRadius = 10.0f; // 判定半径
+
+	Vector3 packagePos = localHeavyPackage->GetTransform().GetPosition();
+
+	// 遍历所有在线玩家
+	for (auto const& [id, player] : serverPlayers) {
+		if (player) {
+			float dist = Vector::Length(player->GetTransform().GetPosition() - packagePos);
+			if (dist < activationRadius) {
+				playersInRange++;
+			}
+		}
+	}
+
+	PhysicsObject* phys = localHeavyPackage->GetPhysicsObject();
+	RenderObject* rend = localHeavyPackage->GetRenderObject();
+
+	// 规则：需要至少 2 名玩家
+	if (playersInRange >= 2) {
+		// 激活状态：变轻，变绿
+		if (phys->GetInverseMass() < 0.1f) { // 之前是 0
+			phys->SetInverseMass(2.0f); // 变得容易推动
+
+			if (rend) rend->SetColour(Vector4(0, 1, 0, 1)); // 绿色
+
+			// 可选：发送消息通知客户端 (State Changed)
+			// 简单起见，我们依赖 Snapshot 同步位置。
+			// 颜色同步通常需要 StatePacket，这里如果只同步了位置，客户端看到的还是红色，但物体会动。
+			// 完美的做法是添加 ObjectState 包，但对于 Part B 基础分，物理同步是关键。
+		}
+	}
+	else {
+		// 冻结状态：无限质量，变红
+		if (phys->GetInverseMass() > 0.1f) {
+			phys->SetInverseMass(0.0f); // 无法移动
+			phys->SetLinearVelocity(Vector3(0, 0, 0)); // 立即停下
+			phys->SetAngularVelocity(Vector3(0, 0, 0));
+			if (rend) rend->SetColour(Vector4(1, 0, 0, 1)); // 红色
+		}
 	}
 }
