@@ -1,24 +1,26 @@
 #pragma once
+#include <string>
+#include <vector>
+#include <functional>
 
 enum BehaviourState {
-	Initialise,
-	Failure,
-	Success,
-	Ongoing
+    Initialise,
+    Failure,
+    Success,
+    Ongoing
 };
 
-class BehaviourNode	{
+class BehaviourNode {
 public:
-	BehaviourNode(const std::string &nodeName)	{
-		currentState	= Initialise;
-		name			= nodeName;
-	}
-	virtual ~BehaviourNode() {}
-	virtual BehaviourState Execute(float dt) = 0;
+    BehaviourNode(const std::string& nodeName) {
+        currentState = Initialise;
+        name = nodeName;
+    }
+    virtual ~BehaviourNode() {}
+    virtual BehaviourState Execute(float dt) = 0;
+    virtual void Reset() { currentState = Initialise; }
 
-	//BehaviourState	GetState() const {return currentState; }
-	virtual void	Reset()			 {currentState = Initialise; }
 protected:
-	BehaviourState	currentState;
-	std::string		name;
+    BehaviourState currentState;
+    std::string name;
 };

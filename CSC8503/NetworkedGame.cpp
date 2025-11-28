@@ -7,17 +7,15 @@
 #include "Window.h"
 #include "Debug.h"
 
-// --- 任务 2.3: 包含 MyGame 需要的组件 ---
 #include "PhysicsObject.h"
 #include "RenderObject.h"
 #include "TextureLoader.h"
 #include "StateGameObject.h" 
 #include "FragileGameObject.h" 
-
-// --- 修复: 添加 Ray 和 CollisionDetection ---
+#include <fstream>
 #include "Ray.h"
 #include "CollisionDetection.h"
-
+#include "Assets.h"
 #define COLLISION_MSG 30
 
 using namespace NCL;
@@ -88,6 +86,58 @@ void NetworkedGame::StartAsServer() {
 	// --- 关键: 将服务器玩家设为 MyGame 的 'playerObject' ---
 	// 这样 MyGame::UpdateGame 中的 AI 才能找到目标
 	playerObject = localPlayer;
+
+	// --- 3.1 生成鹅 NPC ---
+	// 1. 初始化网格
+	InitGrid();
+
+	// 2. 生成鹅
+	Vector3 goosePos = Vector3(20, 0, 20); // 放在稍微远一点的地方
+	angryGoose = new GooseNPC(navGrid, localPlayer); // 追逐服务器玩家
+
+	// 设置外观和物理
+	angryGoose->GetTransform().SetPosition(goosePos).SetScale(Vector3(2, 2, 2));
+	angryGoose->SetRenderObject(new RenderObject(angryGoose->GetTransform(), enemyMesh, notexMaterial));
+	angryGoose->GetRenderObject()->SetColour(Vector4(1, 0.5f, 0, 1)); // 橙色
+
+	angryGoose->SetPhysicsObject(new PhysicsObject(angryGoose->GetTransform(), new SphereVolume(1.5f)));
+	angryGoose->GetPhysicsObject()->SetInverseMass(1.0f);
+	angryGoose->GetPhysicsObject()->InitSphereInertia();
+	angryGoose->SetGameWorld(&world); // 这一步很重要，用于射线检测
+
+	// 加入世界
+	world.AddGameObject(angryGoose);
+
+	// 注意：如果是网络游戏，鹅也需要 NetworkObject 才能在客户端看到
+	// 给鹅 ID 101
+	NetworkObject* netObj = new NetworkObject(*angryGoose, 101);
+	networkObjects.push_back(netObj);
+	angryGoose->SetNetworkObject(netObj);
+
+	// --- 任务 3.3: 生成竞争对手 ---
+	Vector3 rivalPos = Vector3(-20, 0, -20);
+	rivalAI = new RivalAI(navGrid);
+	rivalAI->SetGameWorld(&world); // 重要：传入 world 以便搜寻目标
+
+	// 设置基本属性
+	rivalAI->GetTransform().SetPosition(rivalPos).SetScale(Vector3(1.5f, 1.5f, 1.5f));
+
+	// 设置外观 (复用玩家的模型，但换个颜色，比如紫色)
+	// 假设 catMesh 已存在
+	rivalAI->SetRenderObject(new RenderObject(rivalAI->GetTransform(), catMesh, notexMaterial));
+	rivalAI->GetRenderObject()->SetColour(Vector4(0.5f, 0, 0.5f, 1)); // 紫色
+
+	// 设置物理
+	rivalAI->SetPhysicsObject(new PhysicsObject(rivalAI->GetTransform(), new SphereVolume(1.5f)));
+	rivalAI->GetPhysicsObject()->SetInverseMass(1.0f);
+	rivalAI->GetPhysicsObject()->InitSphereInertia();
+
+	// 注册到网络
+	NetworkObject* rivalNet = new NetworkObject(*rivalAI, 102); // ID 102
+	networkObjects.push_back(rivalNet);
+	rivalAI->SetNetworkObject(rivalNet);
+
+	world.AddGameObject(rivalAI);
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
@@ -470,4 +520,31 @@ void NetworkedGame::ServerUpdateCoopMechanic(float dt) {
 			if (rend) rend->SetColour(Vector4(1, 0, 0, 1)); // 红色
 		}
 	}
+}
+
+void NetworkedGame::InitGrid() {
+	// 动态生成一个简单的 Grid 文件 (TestGrid.grid)
+	// 假设地图大小 200x200，格子大小 10 -> 20x20 个格子
+	int nodeSize = 10;
+	int width = 40; // 400 宽
+	int height = 40; // 400 高
+	// 这样覆盖 -200 到 +200
+
+	std::ofstream outfile(Assets::DATADIR + "TestGrid.grid");
+	outfile << nodeSize << std::endl;
+	outfile << width << std::endl;
+	outfile << height << std::endl;
+
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			// 这里可以根据世界坐标判断是否有墙，目前全部设为地面 '.'
+			// 进阶做法：遍历 world 中的物体，如果这里有墙就写 'x'
+			outfile << ".";
+		}
+		outfile << std::endl;
+	}
+	outfile.close();
+
+	// 加载网格
+	navGrid = new NavigationGrid("TestGrid.grid");
 }

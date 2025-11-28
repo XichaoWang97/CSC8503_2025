@@ -44,7 +44,8 @@ namespace NCL {
 			int nodeSize;
 			int gridWidth;
 			int gridHeight;
-
+			
+			Vector3 gridOffset; // New
 			GridNode* allNodes;
 		};
 	}

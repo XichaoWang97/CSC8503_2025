@@ -28,6 +28,10 @@ NavigationGrid::NavigationGrid(const std::string&filename) : NavigationGrid() {
 	infile >> gridWidth;
 	infile >> gridHeight;
 
+	// Calculate grid offset to center the grid at world origin
+	gridOffset.x = -(gridWidth * nodeSize) / 2.0f;
+	gridOffset.z = -(gridHeight * nodeSize) / 2.0f;
+
 	allNodes = new GridNode[gridWidth * gridHeight];
 
 	for (int y = 0; y < gridHeight; ++y) {
@@ -36,7 +40,8 @@ NavigationGrid::NavigationGrid(const std::string&filename) : NavigationGrid() {
 			char type = 0;
 			infile >> type;
 			n.type = type;
-			n.position = Vector3((float)(x * nodeSize), 0, (float)(y * nodeSize));
+
+			n.position = Vector3((float)(x * nodeSize), 0, (float)(y * nodeSize)) + gridOffset;
 		}
 	}
 	
@@ -77,11 +82,11 @@ NavigationGrid::~NavigationGrid()	{
 
 bool NavigationGrid::FindPath(const Vector3& from, const Vector3& to, NavigationPath& outPath) {
 	//need to work out which node 'from' sits in, and 'to' sits in
-	int fromX = ((int)from.x / nodeSize);
-	int fromZ = ((int)from.z / nodeSize);
+	int fromX = ((int)(from.x - gridOffset.x) / nodeSize);
+	int fromZ = ((int)(from.z - gridOffset.z) / nodeSize);
 
-	int toX = ((int)to.x / nodeSize);
-	int toZ = ((int)to.z / nodeSize);
+	int toX = ((int)(to.x - gridOffset.x) / nodeSize);
+	int toZ = ((int)(to.z - gridOffset.z) / nodeSize);
 
 	if (fromX < 0 || fromX > gridWidth - 1 ||
 		fromZ < 0 || fromZ > gridHeight - 1) {

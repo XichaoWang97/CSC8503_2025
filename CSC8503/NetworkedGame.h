@@ -3,6 +3,9 @@
 #include "NetworkBase.h"
 #include "NetworkState.h"
 #include "NetworkObject.h"
+#include "NavigationGrid.h"
+#include "GooseNPC.h"
+#include "RivalAI.h"
 
 namespace NCL::CSC8503 {
 	class GameServer;
@@ -69,5 +72,12 @@ namespace NCL::CSC8503 {
 
 		// 辅助函数：生成网络物体（非玩家）
 		GameObject* SpawnNetworkedObject(int id, Vector3 pos, Vector3 scale, float inverseMass);
+
+		// --- 任务 3.1 新增: 鹅 NPC 和网格 ---
+		NavigationGrid* navGrid = nullptr;
+		GooseNPC* angryGoose = nullptr;
+
+		void InitGrid(); // 新增初始化函数
+		RivalAI* rivalAI = nullptr; // 竞争对手 AI
 	};
 }
