@@ -1,7 +1,7 @@
 #include "Window.h"
 
 #include "Debug.h"
-
+#include "GameStates.h"
 #include "StateMachine.h"
 #include "StateTransition.h"
 #include "State.h"
@@ -374,13 +374,19 @@ int main() {
 #endif
 
 	MyGame* g = new MyGame(*world, *renderer, *physics);
+	NetworkedGame* ng = new NetworkedGame(*world, *renderer, *physics);
+	// --- 任务 2.1: 初始化 PushdownMachine ---
+	// 初始状态是主菜单
+	PushdownMachine machine(new MainMenuState(g, ng, world, physics));
 
-	w->GetTimer().GetTimeDeltaSeconds(); //Clear the timer so we don't get a larget first dt!
-	while (w->UpdateWindow() && !Window::GetKeyboard()->KeyDown(KeyCodes::ESCAPE)) {
+	w->GetTimer().GetTimeDeltaSeconds();
+
+	// 主循环
+	while (w->UpdateWindow() && !Window::GetKeyboard()->KeyDown(KeyCodes::END)) { // 用 END 键或者 ESC (如果在菜单里) 退出
 		float dt = w->GetTimer().GetTimeDeltaSeconds();
 		if (dt > 0.1f) {
 			std::cout << "Skipping large time delta" << std::endl;
-			continue; //must have hit a breakpoint or something to have a 1 second frame time!
+			continue;
 		}
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::PRIOR)) {
 			w->ShowConsole(true);
@@ -395,14 +401,20 @@ int main() {
 
 		w->SetTitle("Gametech frame time:" + std::to_string(1000.0f * dt));
 
-		g->UpdateGame(dt);
+		// --- 任务 2.1: 更新状态机 ---
+		if (!machine.Update(dt)) {
+			// 如果状态机返回 false (栈空了)，说明要退出游戏
+			break;
+		}
 
-		world->UpdateWorld(dt);
-		physics->Update(dt);
-		renderer->Update(dt);	
+		// 注意：物理和世界的 Update 现在移到了 SinglePlayerState::OnUpdate 内部
+		// 这样暂停时就不会更新物理了
+		// 渲染依然在主循环做，因为这通常是独立于逻辑状态的
+		renderer->Update(dt);
 		renderer->Render();
-		
+
 		Debug::UpdateRenderables(dt);
 	}
+
 	Window::DestroyGameWindow();
 }

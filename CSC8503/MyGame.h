@@ -25,6 +25,14 @@ namespace NCL {
 
 			virtual void UpdateGame(float dt);
 
+			// --- 任务 2.1 新增: 公开重置接口 ---
+			void ResetGame() {
+				InitWorld();
+			}
+			// --- 任务 2.1 新增: 获取核心系统引用 (供状态机 Update 使用) ---
+			GameWorld* GetGameWorld() const { return &world; }
+			PhysicsSystem* GetPhysics() const { return &physics; }
+
 		protected:
 			void InitCamera();
 			void InitWorld();
@@ -49,14 +57,10 @@ namespace NCL {
 			GameObject* playerObject = nullptr;
 			void PlayerControl(float dt);
 			// --- 修复跳跃: 射线检测地面 ---
-			bool IsPlayerOnGround();
+			bool IsPlayerOnGround(GameObject* obj);
 			// --- 任务 1.4 新增: 创建易碎包裹 ---
 			FragileGameObject* AddFragilePackageToWorld(const NCL::Maths::Vector3& position);
 			FragileGameObject* packageObject = nullptr;
-
-			// original code below
-			//StateGameObject* AddStateObjectToWorld(const Vector3& position);
-			//StateGameObject* testStateObject;
 			
 			GameWorld& world;
 			GameTechRendererInterface& renderer;
@@ -100,12 +104,10 @@ namespace NCL {
 			void BridgeConstraintTest();
 
 			// ---------------------------------------------------------------------------------------------
-
 			bool SelectObject();
 			void MoveSelectedObject();
 			void DebugObjectMovement();
 			void LockedObjectMovement();
-
 			// ---------------------------------------------------------------------------------------------
 		};
 	}

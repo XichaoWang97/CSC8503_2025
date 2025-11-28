@@ -734,18 +734,18 @@ void MyGame::PlayerControl(float dt) {
 
 	// 8. 跳跃
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-		if (IsPlayerOnGround()) {
+		if (IsPlayerOnGround(playerObject)) {
 			phys->ApplyLinearImpulse(Vector3(0, 20, 0));
 		}
 	}
 }
 
 // --- 使用射线检测地面 ---
-bool MyGame::IsPlayerOnGround() {
-	if (!playerObject) return false;
+bool MyGame::IsPlayerOnGround(GameObject* obj) {
+	if (!obj) return false;
 
 	// 获取玩家位置
-	Vector3 playerPos = playerObject->GetTransform().GetPosition();
+	Vector3 playerPos = obj->GetTransform().GetPosition();
 
 	// 向下发射射线
 	Ray ray(playerPos, Vector3(0, -1, 0));
@@ -756,7 +756,7 @@ bool MyGame::IsPlayerOnGround() {
 	float groundCheckDist = 1.1f;
 
 	// 使用 Raycast，记得传入 playerObject 以忽略自身
-	if (world.Raycast(ray, collision, true, playerObject)) {
+	if (world.Raycast(ray, collision, true, obj)) {
 		if (collision.rayDistance < groundCheckDist) {
 			return true; // 碰到了地面或物体
 		}

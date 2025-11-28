@@ -677,7 +677,6 @@ Matrix4 CollisionDetection::GenerateInverseView(const Camera &c) {
 	return iview;
 }
 
-
 /*
 If you've read through the Deferred Rendering tutorial you should have a pretty
 good idea what this function does. It takes a 2D position, such as the mouse
@@ -724,3 +723,27 @@ Vector3	CollisionDetection::UnprojectScreenPosition(Vector3 position, float aspe
 	return Vector3(transformed.x / transformed.w, transformed.y / transformed.w, transformed.z / transformed.w);
 }
 
+/*bool CollisionDetection::OBBAABBIntersection(const OBBVolume& volumeA, const Transform& worldTransformA,
+	const AABBVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
+	// Get OBB information about world transform and orientation
+	Quaternion orientation = worldTransformA.GetOrientation();
+	Vector3 position = worldTransformA.GetPosition();
+
+	Matrix3 transform = Quaternion::RotationMatrix<Matrix3>(orientation);
+	Matrix3 invTransform = Quaternion::RotationMatrix<Matrix3>(orientation.Conjugate());
+
+	// Transform the sphere center into the OBB's local space
+	Vector3 localSpherePos = invTransform * (worldTransformB.GetPosition() - position);
+
+	// Perform AABB vs Sphere detection in local space (similar to AABBSphereIntersection)
+	Vector3 boxSize = volumeA.GetHalfDimensions();
+	// Find the point on the AABB that is closest to the sphere center (Clamp)
+	Vector3 closestPointInLocal = Vector::Clamp(localSpherePos, -boxSize, boxSize);
+
+	// calculate the distance from the sphere center to this closest point
+	Vector3 localDist = localSpherePos - closestPointInLocal;
+	float distance = Vector::Length(localDist);
+
+	
+	return false;
+}*/
