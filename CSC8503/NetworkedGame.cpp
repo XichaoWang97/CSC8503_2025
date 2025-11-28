@@ -132,7 +132,7 @@ void NetworkedGame::UpdateGame(float dt) {
 		if (localPlayer) {
 			Vector3 playerPos = localPlayer->GetTransform().GetPosition();
 
-			float yaw = world.GetMainCamera().GetYaw();
+			float yaw = (int)world.GetMainCamera().GetYaw();
 			float pitch = world.GetMainCamera().GetPitch();
 
 			// 限制 Pitch
@@ -198,7 +198,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 		newPacket.buttonstates[4] = Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE) ? 1 : 0;
 
 		// 发送相机朝向 (Yaw) 用于移动方向计算
-		newPacket.yaw = world.GetMainCamera().GetYaw();
+		newPacket.yaw = (int)world.GetMainCamera().GetYaw();
 
 		newPacket.lastID = 0;
 		thisClient->SendPacket(newPacket);

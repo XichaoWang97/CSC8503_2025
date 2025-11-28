@@ -31,9 +31,29 @@ namespace NCL::CSC8503 {
 	struct ClientPacket : public GamePacket {
 		int		lastID;
 		char	buttonstates[8];
-		float yaw; // NEW
+		int     yaw; // NEW
 		ClientPacket() {
 			size = sizeof(ClientPacket);
+		}
+	};
+
+	struct NewPlayerPacket : public GamePacket {
+		int playerID = -1;
+		Vector3 startPos;
+		NewPlayerPacket(int p = -1, Vector3 pos = Vector3()) {
+			type = BasicNetworkMessages::Player_Connected;
+			size = sizeof(NewPlayerPacket) - sizeof(GamePacket);
+			playerID = p;
+			startPos = pos;
+		}
+	};
+
+	struct PlayerDisconnectPacket : public GamePacket {
+		int playerID = -1;
+		PlayerDisconnectPacket(int p = -1) {
+			type = BasicNetworkMessages::Player_Disconnected;
+			size = sizeof(PlayerDisconnectPacket) - sizeof(GamePacket);
+			playerID = p;
 		}
 	};
 
