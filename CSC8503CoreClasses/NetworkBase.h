@@ -76,28 +76,18 @@ protected:
 	std::multimap<int, PacketReceiver*> packetHandlers;
 };
 
-/*struct StringPacket : public GamePacket {
+struct StringPacket : public GamePacket {
 	char stringData[256];
-	
+
 	StringPacket(const std::string & message) {
 		type = BasicNetworkMessages::String_Message;
 		size = (short)message.length();
 		memcpy(stringData, message.data(), size);
 	};
-	
+
 	std::string GetStringFromData() {
 		std::string realString(stringData);
 		realString.resize(size);
 		return realString;
 	}
 };
-
-// New "Welcome" packet, server -> client, tell the client its player ID
-struct PlayerConnectedPacket : public GamePacket {
-	int playerID = -1;
-	PlayerConnectedPacket(int p = -1) {
-		type = BasicNetworkMessages::Player_Connected;
-		size = sizeof(int);
-		playerID = p;
-	}
-};*/

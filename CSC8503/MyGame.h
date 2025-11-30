@@ -3,6 +3,10 @@
 #include "RenderObject.h"
 #include "StateGameObject.h"
 #include "FragileGameObject.h"
+#include "NavigationGrid.h"
+#include "GooseNPC.h"
+#include "RivalAI.h"
+
 namespace NCL {
 	class Controller;
 
@@ -36,9 +40,7 @@ namespace NCL {
 		protected:
 			void InitCamera();
 			void InitWorld();
-			/*
-			 * 任务 0.2: 关卡初始化函数
-			 */
+
 			void InitCourierLevel();
 
 			// Add specific game objects to the world
@@ -47,6 +49,9 @@ namespace NCL {
 			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f);
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f);
 			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
+
+			RivalAI* AddRivalAIToWorld(const NCL::Maths::Vector3& position);
+			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position);
 
 			// --- 任务 0.2 新增: 关卡特定对象指针 ---
 			GameObject* targetZone = nullptr;   // 终点区域
@@ -86,6 +91,7 @@ namespace NCL {
 			Rendering::Mesh* kittenMesh = nullptr;
 			Rendering::Mesh* enemyMesh = nullptr;
 			Rendering::Mesh* bonusMesh = nullptr;
+			Rendering::Mesh* gooseMesh = nullptr;
 
 			GameTechMaterial checkerMaterial;
 			GameTechMaterial glassMaterial;
@@ -102,12 +108,17 @@ namespace NCL {
 
 			void BridgeConstraintTest();
 
-			// ---------------------------------------------------------------------------------------------
+			// [新增] 用于存储导航网格
+			NavigationGrid* navGrid = nullptr;
+			GooseNPC* gooseNPC = nullptr;
+			RivalAI* rivalAI = nullptr;
+
+			// ---------------------
 			bool SelectObject();
 			void MoveSelectedObject();
 			void DebugObjectMovement();
 			void LockedObjectMovement();
-			// ---------------------------------------------------------------------------------------------
+			// ---------------------
 		};
 	}
 }

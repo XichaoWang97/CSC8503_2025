@@ -15,30 +15,34 @@ GooseNPC::GooseNPC(NavigationGrid* _grid, GameObject* _player) : StateGameObject
     patrolSpeed = 8.0f;
 
     // state machine
-    // 状态 1: Wander (这里简化为在原地或随机移动，或者等待)
+    // state 1: Wander / wait
     State* stateWander = new State([&](float dt)->void {
         this->Wander(dt);
         Debug::Print("Goose: HONK! (Wander)", Vector2(10, 50), Vector4(1, 1, 0, 1));
-        });
+        }
+    );
 
-    // 状态 2: Chase (寻路追逐)
+    // state 2: Chase
     State* stateChase = new State([&](float dt)->void {
         this->ChasePlayer(dt);
         Debug::Print("Goose: CHASING!", Vector2(10, 50), Vector4(1, 0, 0, 1));
-        });
+        }
+    );
 
     stateMachine->AddState(stateWander);
     stateMachine->AddState(stateChase);
 
-    // 转换: 看见玩家 -> Chase
+    // see player -> Chase
     stateMachine->AddTransition(new StateTransition(stateWander, stateChase, [&]()->bool {
         return this->CanSeeTarget();
-        }));
+        })
+    );
 
-    // 转换: 看不见玩家 -> Wander
+    // can not see player -> Wander
     stateMachine->AddTransition(new StateTransition(stateChase, stateWander, [&]()->bool {
         return !this->CanSeeTarget();
-        }));
+        })
+    );
 }
 
 GooseNPC::~GooseNPC() {}

@@ -55,9 +55,9 @@ MyGame::MyGame(GameWorld& inWorld, GameTechRendererInterface& inRenderer, Physic
 	kittenMesh = renderer.LoadMesh("Kitten.msh");
 
 	enemyMesh = renderer.LoadMesh("Keeper.msh");
-
 	bonusMesh = renderer.LoadMesh("19463_Kitten_Head_v1.msh");
 	capsuleMesh = renderer.LoadMesh("capsule.msh");
+	gooseMesh = renderer.LoadMesh("goose.msh");
 
 	defaultTex = renderer.LoadTexture("Default.png");
 	checkerTex = renderer.LoadTexture("checkerboard.png");
@@ -74,6 +74,21 @@ MyGame::MyGame(GameWorld& inWorld, GameTechRendererInterface& inRenderer, Physic
 }
 
 MyGame::~MyGame() {
+	delete cubeMesh;
+	delete sphereMesh;
+	delete catMesh;
+	delete kittenMesh;
+	delete enemyMesh;
+	delete bonusMesh;
+	delete capsuleMesh;
+	delete gooseMesh;
+
+	delete defaultTex;
+	delete checkerTex;
+	delete glassTex;
+	delete controller;
+
+	delete navGrid;
 }
 
 void MyGame::UpdateGame(float dt) {
@@ -364,7 +379,7 @@ GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
 	float inverseMass = 0.5f;
 
 	GameObject* character = new GameObject("player");
-	SphereVolume* volume = new SphereVolume(1.0f);
+	SphereVolume* volume = new SphereVolume(0.5f);
 
 	character->SetBoundingVolume(volume);
 
@@ -388,6 +403,39 @@ GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
 	world.AddGameObject(character);
 
 	return character;
+}
+
+RivalAI* MyGame::AddRivalAIToWorld(const Vector3& position) {
+	float meshSize = 1.0f;
+	float inverseMass = 0.5f;
+
+	RivalAI* rival = new RivalAI(navGrid);
+	SphereVolume* volume = new SphereVolume(0.5f);
+
+	rival->SetBoundingVolume(volume);
+
+	rival->GetTransform()
+		.SetScale(Vector3(meshSize, meshSize, meshSize))
+		.SetPosition(position);
+
+	rival->SetRenderObject(new RenderObject(rival->GetTransform(), catMesh, notexMaterial));
+	rival->GetRenderObject()->SetColour(Vector4(0.5f, 0, 0.5f, 1)); // 给玩家设置特殊颜色 (例如青色 Cyan)
+
+	PhysicsObject* physicsObj = new PhysicsObject(rival->GetTransform(), rival->GetBoundingVolume());
+	physicsObj->SetInverseMass(inverseMass);
+	physicsObj->InitSphereInertia();
+
+	// [关键] 注入 GameWorld，否则它找不到包裹也不能生成石头
+	rival->SetGameWorld(&world);
+	// --- 改动 3: 取消弹跳 ---
+	physicsObj->SetElasticity(0.0f); // 设为 0，落地不反弹
+	// physicsObj->SetFriction(0.8f); // 可以增加摩擦力，但这通常用于物体之间的接触计算，这里主要靠我们手写的刹车逻辑
+
+	rival->SetPhysicsObject(physicsObj);
+
+	world.AddGameObject(rival);
+
+	return rival;
 }
 
 StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
@@ -416,6 +464,34 @@ StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	world.AddGameObject(character);
 
 	return character;
+}
+
+GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position)
+{
+	float meshSize = 3.0f;
+	float inverseMass = 0.5f;
+
+	GooseNPC* goose = new GooseNPC(navGrid, playerObject); // init goose with navgrid and player reference
+	AABBVolume* volume = new AABBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
+	goose->SetBoundingVolume(volume);
+
+	goose->GetTransform()
+		.SetScale(Vector3(meshSize, meshSize, meshSize))
+		.SetPosition(position);
+
+	goose->SetRenderObject(new RenderObject(goose->GetTransform(), gooseMesh, notexMaterial));
+	goose->GetRenderObject()->SetColour(Vector4(1, 0.5f, 0, 1)); // orange color goose
+
+	PhysicsObject* physicsObj = new PhysicsObject(goose->GetTransform(), goose->GetBoundingVolume());
+
+	physicsObj->SetInverseMass(inverseMass);
+	physicsObj->InitSphereInertia();
+
+	goose->SetPhysicsObject(physicsObj);
+
+	world.AddGameObject(goose);
+
+	return goose;
 }
 
 bool MyGame::SelectObject() {
@@ -580,7 +656,7 @@ void MyGame::BridgeConstraintTest() {
 	world.AddConstraint(constraint);
 }
 
-// --- 任务 0.2: 关卡搭建核心逻辑 ---
+// --- 关卡搭建核心逻辑 ---
 void MyGame::InitCourierLevel() {
 	// 1. 添加地板
 	// 位置在 Y=-20，大小足够大
@@ -632,7 +708,7 @@ void MyGame::InitCourierLevel() {
 	// --- 任务 1.4: 使用 FragileGameObject 创建包裹 ---
 	packageObject = AddFragilePackageToWorld(Vector3(-50, 2, 60)); // 放低一点，防止落地直接摔坏
 
-	// --- AI 设置 ---
+	// --- Enemy 简单 AI 设置 ---
 	Vector3 enemyStartPos = Vector3(0, 0, 0);
 	std::vector<Vector3> aiPath;
 	float pathY = -16.0f;
@@ -641,16 +717,21 @@ void MyGame::InitCourierLevel() {
 	aiPath.push_back(Vector3(-20, pathY, -20));
 	aiPath.push_back(Vector3(-20, pathY, 20));
 
-	// 使用更新后的 AddEnemyToWorld
+	// Add Enemy (RED) that patrols and targets the player
 	StateGameObject* enemy = AddEnemyToWorld(enemyStartPos);
-
 	enemy->SetPatrolPath(aiPath);
 	enemy->SetTarget(playerObject);
-	// --- 任务 1.2 修改: 注入 GameWorld ---
 	enemy->SetGameWorld(&world);
-
-	// --- 任务 1.3: 设置重置点 ---
 	enemy->SetResetPoint(playerStartPos);
+
+	// Init Navigation Grid
+	if (!navGrid) {
+		navGrid = new NavigationGrid("TestGrid1.txt");
+	}
+	// Add Goose NPC and rival AI
+	gooseNPC = AddGooseNPCToWorld(Vector3(-20, 0, -20));
+	rivalAI = AddRivalAIToWorld(Vector3(20, 0, 20));
+
 }
 
 // --- 现代 ARPG 控制实现 ---

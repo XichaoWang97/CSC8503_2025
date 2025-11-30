@@ -406,11 +406,12 @@ int main() {
 		}
 
 		// 物理和世界的 Update 现在移到了 Mygame 内部
-
 		renderer->Update(dt);
 		renderer->Render();
 
 		Debug::UpdateRenderables(dt);
 	}
+	//TestNetworking();
+	//system("pause");
 	Window::DestroyGameWindow();
 }
