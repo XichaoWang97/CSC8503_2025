@@ -38,7 +38,6 @@ namespace NCL {
 			void InitWorld();
 			/*
 			 * 任务 0.2: 关卡初始化函数
-			 * 用于构建 Part A 的 Courier 关卡环境
 			 */
 			void InitCourierLevel();
 
@@ -55,7 +54,7 @@ namespace NCL {
 			GameObject* pressurePlate = nullptr; // 压力板
 			// --- 任务 0.3 新增: 玩家指针与控制 ---
 			GameObject* playerObject = nullptr;
-			void PlayerControl(float dt);
+			virtual void PlayerControl(float dt);
 			// --- 修复跳跃: 射线检测地面 ---
 			bool IsPlayerOnGround(GameObject* obj);
 			// --- 任务 1.4 新增: 创建易碎包裹 ---

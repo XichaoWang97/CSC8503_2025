@@ -31,7 +31,7 @@ namespace NCL::CSC8503 {
 	struct ClientPacket : public GamePacket {
 		int		lastID;
 		char	buttonstates[8];
-		int     yaw; // NEW
+
 		ClientPacket() {
 			size = sizeof(ClientPacket);
 		}
@@ -68,8 +68,6 @@ namespace NCL::CSC8503 {
 		virtual bool WritePacket(GamePacket** p, bool deltaFrame, int stateID);
 
 		void UpdateStateHistory(int minID);
-
-		int GetNetworkID() { return networkID; }
 
 	protected:
 

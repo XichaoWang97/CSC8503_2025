@@ -14,11 +14,7 @@ enum BasicNetworkMessages {
 	Received_State, //received from a client, informs that its received packet n
 	Player_Connected,
 	Player_Disconnected,
-	Shutdown,
-
-	// New
-	Client_Input,	// sent from client to server to inform about input state
-	Client_Ready	// tells server the client is ready to start
+	Shutdown
 };
 
 struct GamePacket {
@@ -80,7 +76,7 @@ protected:
 	std::multimap<int, PacketReceiver*> packetHandlers;
 };
 
-struct StringPacket : public GamePacket {
+/*struct StringPacket : public GamePacket {
 	char stringData[256];
 	
 	StringPacket(const std::string & message) {
@@ -104,4 +100,4 @@ struct PlayerConnectedPacket : public GamePacket {
 		size = sizeof(int);
 		playerID = p;
 	}
-};
+};*/

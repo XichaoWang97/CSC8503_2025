@@ -30,6 +30,7 @@ bool NetworkObject::WritePacket(GamePacket** p, bool deltaFrame, int stateID) {
 	}
 	return WriteFullPacket(p);
 }
+
 //Client objects recieve these packets
 bool NetworkObject::ReadDeltaPacket(DeltaPacket &p) {
 	if (p.fullID != lastFullState.stateID) {

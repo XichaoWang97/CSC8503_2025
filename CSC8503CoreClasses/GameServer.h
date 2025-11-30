@@ -19,9 +19,6 @@ namespace NCL {
 
 			virtual void UpdateServer();
 
-			// New
-			bool SendPacketToClient(GamePacket& packet, int peerID);
-
 		protected:
 			int			port;
 			int			clientMax;

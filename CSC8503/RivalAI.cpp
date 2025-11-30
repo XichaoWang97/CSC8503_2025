@@ -34,26 +34,25 @@ void RivalAI::Update(float dt) {
 }
 
 void RivalAI::BuildBehaviourTree() {
-    // 构建行为树：
     // Root (Selector)
     //   -> Sequence (Attack): HaveTarget? -> InRange? -> ThrowStone
     //   -> Sequence (Chase): HaveTarget? -> MoveToTarget
     //   -> Action (Search): FindTarget
 
-    // 1. 寻找目标
     BehaviourAction* findItem = new BehaviourAction("Find Item", [&](float dt, BehaviourState state) -> BehaviourState {
         return FindTargetPacket(dt);
-        });
+        }
+    );
 
-    // 2. 移动到目标
     BehaviourAction* moveToItem = new BehaviourAction("Move To Item", [&](float dt, BehaviourState state) -> BehaviourState {
         return MoveToTarget(dt);
-        });
+        }
+    );
 
-    // 3. 投掷石头
     BehaviourAction* throwStone = new BehaviourAction("Throw Stone", [&](float dt, BehaviourState state) -> BehaviourState {
         return ThrowStone(dt);
-        });
+        }
+    );
 
     // 组合逻辑
     BehaviourSequence* sequenceAttack = new BehaviourSequence("Attack Sequence");

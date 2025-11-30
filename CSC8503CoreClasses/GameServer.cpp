@@ -74,11 +74,3 @@ void GameServer::UpdateServer() {
 void GameServer::SetGameWorld(GameWorld &g) {
 	gameWorld = &g;
 }
-
-// New
-bool GameServer::SendPacketToClient(GamePacket& packet, int peerID) {
-	ENetPeer* peer = &netHandle->peers[peerID];
-	ENetPacket* dataPacket = enet_packet_create(&packet, packet.GetTotalSize(), 0);
-	enet_peer_send(peer, 0, dataPacket);
-	return true;
-}

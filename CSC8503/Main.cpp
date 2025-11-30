@@ -310,8 +310,8 @@ protected:
 void TestNetworking() {
 	NetworkBase::Initialise();
 	
-	TestPacketReceiver serverReceiver(" Server ");
-	TestPacketReceiver clientReceiver(" Client ");
+	TestPacketReceiver serverReceiver("Server");
+	TestPacketReceiver clientReceiver("Client");
 	
 	int port = NetworkBase::GetDefaultPort();
 	
@@ -324,10 +324,10 @@ void TestNetworking() {
 	bool canConnect = client -> Connect(127, 0, 0, 1, port);
 	
 	for (int i = 0; i < 100; ++i) {
-		StringPacket pkt_ser(" Server says hello ! " + std::to_string(i));
+		StringPacket pkt_ser("Server says hello !" + std::to_string(i));
 		server -> SendGlobalPacket(pkt_ser);
 
-		StringPacket pkt_cli(" Client says hello ! " + std::to_string(i));
+		StringPacket pkt_cli("Client says hello !" + std::to_string(i));
 		client -> SendPacket(pkt_cli);
 
 		server -> UpdateServer();
@@ -375,13 +375,12 @@ int main() {
 
 	MyGame* g = new MyGame(*world, *renderer, *physics);
 	NetworkedGame* ng = new NetworkedGame(*world, *renderer, *physics);
-	// --- 任务 2.1: 初始化 PushdownMachine ---
-	// 初始状态是主菜单
+	// Init PushdownMachine -- main menu state
 	PushdownMachine machine(new MainMenuState(g, ng, world, physics));
 
 	w->GetTimer().GetTimeDeltaSeconds();
 
-	// 主循环
+	// main loop
 	while (w->UpdateWindow() && !Window::GetKeyboard()->KeyDown(KeyCodes::END)) { // 用 END 键或者 ESC (如果在菜单里) 退出
 		float dt = w->GetTimer().GetTimeDeltaSeconds();
 		if (dt > 0.1f) {
@@ -403,18 +402,15 @@ int main() {
 
 		// --- 任务 2.1: 更新状态机 ---
 		if (!machine.Update(dt)) {
-			// 如果状态机返回 false (栈空了)，说明要退出游戏
 			break;
 		}
 
-		// 注意：物理和世界的 Update 现在移到了 SinglePlayerState::OnUpdate 内部
-		// 这样暂停时就不会更新物理了
-		// 渲染依然在主循环做，因为这通常是独立于逻辑状态的
+		// 物理和世界的 Update 现在移到了 Mygame 内部
+
 		renderer->Update(dt);
 		renderer->Render();
 
 		Debug::UpdateRenderables(dt);
 	}
-
 	Window::DestroyGameWindow();
 }
