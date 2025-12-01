@@ -53,7 +53,7 @@ MyGame::MyGame(GameWorld& inWorld, GameTechRendererInterface& inRenderer, Physic
 	sphereMesh = renderer.LoadMesh("sphere.msh");
 	catMesh = renderer.LoadMesh("ORIGAMI_Chat.msh");
 	kittenMesh = renderer.LoadMesh("Kitten.msh");
-
+	coinMesh = renderer.LoadMesh("coin.msh");
 	enemyMesh = renderer.LoadMesh("Keeper.msh");
 	bonusMesh = renderer.LoadMesh("19463_Kitten_Head_v1.msh");
 	capsuleMesh = renderer.LoadMesh("capsule.msh");
@@ -92,16 +92,16 @@ MyGame::~MyGame() {
 }
 
 void MyGame::UpdateGame(float dt) {
-	// 1. 更新相机（处理鼠标旋转输入）
-	// 注意：我们不再使用 LockedObjectMovement 里的强制锁定，而是用下面的 ARPG 逻辑
+
+	// Update camera
 	if (!inSelectionMode) {
 		world.GetMainCamera().UpdateCamera(dt);
 	}
 
-	// --- 第三人称跟随镜头 ---
+	// 第三人称跟随镜头
 	if (playerObject) {
 		Vector3 playerPos = playerObject->GetTransform().GetPosition();
-
+		
 		// 获取当前相机的朝向（由鼠标控制的 Yaw 和 Pitch）
 		float yaw = world.GetMainCamera().GetYaw();
 		float pitch = world.GetMainCamera().GetPitch();
@@ -119,8 +119,8 @@ void MyGame::UpdateGame(float dt) {
 		float dist = 15.0f;
 		Vector3 offset = Vector3(0, 5, 0); // 稍微往上看一点
 
-		// --- 相机避障逻辑 (Camera Collision) ---
-		float maxDist = 15.0f; // 理想距离
+		// Avoid Camera Collision
+		float maxDist = 15.0f;
 		float currentDist = maxDist;
 		// 从玩家头部向相机方向发射射线
 		Vector3 rayOrigin = playerPos + offset;
@@ -141,12 +141,7 @@ void MyGame::UpdateGame(float dt) {
 		world.GetMainCamera().SetPosition(cameraPos);
 	}
 
-	// --- 调试信息显示 --- 如果有终点，在此处画个标记或者文字
-	if (targetZone) {
-		Debug::Print("Destination", Vector2(80, 20), Debug::GREEN);
-	}
-
-	// --- 任务 1.4: 显示包裹血量 ---
+	// Package health display
 	if (packageObject) {
 		float health = packageObject->GetHealth();
 		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
@@ -157,7 +152,7 @@ void MyGame::UpdateGame(float dt) {
 		}
 	}
 
-	// --- 任务 1.5: 谜题逻辑 (压力板与门) ---
+	// puzzle door and pressure plate logic
 	if (puzzleDoor && pressurePlate) {
 		bool isTriggered = false;
 		Vector3 platePos = pressurePlate->GetTransform().GetPosition();
@@ -176,7 +171,7 @@ void MyGame::UpdateGame(float dt) {
 			};
 
 		// 只要玩家或者包裹在上面，就算触发
-		if (CheckTrigger(playerObject) || CheckTrigger(packageObject)) {
+		if (CheckTrigger(playerObject) || CheckTrigger(cubeStone)) {
 			isTriggered = true;
 		}
 
@@ -198,7 +193,6 @@ void MyGame::UpdateGame(float dt) {
 			puzzleDoor->GetTransform().SetPosition(doorPos);
 		}
 
-		// --- 视觉反馈 ---
 		if (isTriggered) {
 			pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // 激活变绿
 			Debug::Print("Gate Open!", Vector2(45, 80), Debug::GREEN);
@@ -209,6 +203,62 @@ void MyGame::UpdateGame(float dt) {
 		}
 	}
 
+	// Coin Collection, iterate in reverse order
+	for (int i = coins.size() - 1; i >= 0; --i) {
+		GameObject* c = coins[i];
+		if (!c->IsActive()) continue;
+
+		// calculate distance to player
+		float dist = Vector::Length((playerObject->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+
+		// collection radius 2.5f
+		if (dist < 2.5f) {
+			world.RemoveGameObject(c, true); // remove coin from world
+			score++;
+			coins.erase(coins.begin() + i); // remove coin from vector
+		}
+	}
+
+	// Win Condition
+	if (!isGameWon && targetZone) {
+		Vector3 zonePos = targetZone->GetTransform().GetPosition();
+		Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
+
+		Vector3 pPos = playerObject->GetTransform().GetPosition();
+
+		bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
+			pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
+
+		// score && inZone -> win
+		if (inZone && score >= winningScore) {
+			isGameWon = true;
+		}
+		// score is not enough
+		if (inZone && score < winningScore) {
+			Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
+		}
+	}
+
+	// --- 3. UI 界面显示 (UI Display) ---
+	if (isGameWon) {
+		// 胜利界面
+		Debug::Print("MISSION SUCCESS!", Vector2(35, 40), Vector4(0, 1, 0, 1));
+		Debug::Print("Score: " + std::to_string(score) + "/" + std::to_string(winningScore), Vector2(40, 50), Vector4(1, 1, 0, 1));
+		Debug::Print("Press F1 to Return/Restart", Vector2(30, 60), Vector4(1, 1, 1, 1));
+
+		// 这里可以添加逻辑暂停游戏，或者等待按键返回主菜单
+		// 比如: if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) { ResetGame(); ... }
+	}
+	else {
+		// 游戏进行中的 HUD
+		std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
+
+		// 根据是否收集满显示不同颜色
+		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
+		Debug::Print(scoreText, Vector2(5, 10), scoreColor); // 左上角显示
+	}
+	//----------------------------------------------------------------------------------
+	
 	// player object update
 	if (!inSelectionMode && playerObject) {
 		playerObject->Update(dt);
@@ -249,43 +299,13 @@ void MyGame::UpdateGame(float dt) {
 		world.ShuffleObjects(false);
 	}
 
-	// 自由视角模式下的调试移动
-	if (inSelectionMode && selectionObject) {
-		DebugObjectMovement();
-	}
-
-	RayCollision closestCollision;
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::K) && selectionObject) {
-		Vector3 rayPos;
-		Vector3 rayDir;
-
-		rayDir = selectionObject->GetTransform().GetOrientation() * Vector3(0, 0, -1);
-		rayPos = selectionObject->GetTransform().GetPosition();
-
-		Ray r = Ray(rayPos, rayDir);
-
-		if (world.Raycast(r, closestCollision, true, selectionObject)) {
-			if (objClosest) {
-				objClosest->GetRenderObject()->SetColour(Vector4(1, 1, 1, 1));
-			}
-			objClosest = (GameObject*)closestCollision.node;
-
-			objClosest->GetRenderObject()->SetColour(Vector4(1, 0, 1, 1));
-		}
-	}
-
-	//This year we can draw debug textures as well!
-	Debug::DrawTex(*defaultTex, Vector2(10, 10), Vector2(5, 5), Debug::WHITE);
-	Debug::DrawLine(Vector3(), Vector3(0, 100, 0), Vector4(1, 0, 0, 1));
+	// Gravity status display
 	if (useGravity) {
 		Debug::Print("(G)ravity on", Vector2(5, 95), Debug::RED);
 	}
 	else {
 		Debug::Print("(G)ravity off", Vector2(5, 95), Debug::RED);
 	}
-
-	SelectObject();
-	MoveSelectedObject();
 
 	world.OperateOnContents(
 		[dt](GameObject* o) {
@@ -332,7 +352,7 @@ GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 }
 
 GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, float inverseMass) {
-	GameObject* sphere = new GameObject("sphere");
+	GameObject* sphere = new GameObject("Stone"); // changed name to Stone
 
 	Vector3 sphereSize = Vector3(radius, radius, radius);
 	SphereVolume* volume = new SphereVolume(radius);
@@ -353,8 +373,8 @@ GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, floa
 	return sphere;
 }
 
-GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, float inverseMass) {
-	GameObject* cube = new GameObject("cube");
+GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, float inverseMass, std::string name) {
+	GameObject* cube = new GameObject(name);
 
 	AABBVolume* volume = new AABBVolume(dimensions);
 	cube->SetBoundingVolume(volume);
@@ -372,6 +392,35 @@ GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, 
 	world.AddGameObject(cube);
 
 	return cube;
+}
+
+GameObject* MyGame::AddCoinToWorld(const Vector3& position, Vector3 dimensions, float inverseMass) {
+	GameObject* coin = new GameObject("Coin");
+
+	// set bounding volume
+	AABBVolume* volume = new AABBVolume(dimensions);
+	coin->SetBoundingVolume(volume);
+
+	coin->GetTransform()
+		.SetScale(dimensions * 2.0f)
+		.SetPosition(position);
+
+	coin->SetRenderObject(new RenderObject(coin->GetTransform(), coinMesh, glassMaterial));
+	coin->GetRenderObject()->SetColour(Vector4(1.0f, 0.84f, 0.0f, 1.0f)); // golden color
+
+	// Set physics, mass = 0, floating and staictic object
+	PhysicsObject* physicsObj = new PhysicsObject(coin->GetTransform(), coin->GetBoundingVolume());
+	physicsObj->SetInverseMass(0.0f);
+	physicsObj->InitSphereInertia();
+
+	coin->SetPhysicsObject(physicsObj);
+
+	world.AddGameObject(coin);
+
+	// add to coins list
+	coins.push_back(coin);
+
+	return coin;
 }
 
 /*RivalAI* MyGame::AddRivalAIToWorld(const Vector3& position) {
@@ -463,142 +512,6 @@ GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position)
 	return goose;
 }
 
-bool MyGame::SelectObject() {
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::Q)) {
-		inSelectionMode = !inSelectionMode;
-		if (inSelectionMode) {
-			Window::GetWindow()->ShowOSPointer(true);
-			Window::GetWindow()->LockMouseToWindow(false);
-		}
-		else {
-			Window::GetWindow()->ShowOSPointer(false);
-			Window::GetWindow()->LockMouseToWindow(true);
-		}
-	}
-	if (inSelectionMode) {
-		Debug::Print("Press Q to change to camera mode!", Vector2(5, 85));
-
-		if (Window::GetMouse()->ButtonDown(NCL::MouseButtons::Left)) {
-			if (selectionObject) {	//set colour to deselected;
-				selectionObject->GetRenderObject()->SetColour(Vector4(1, 1, 1, 1));
-				selectionObject = nullptr;
-			}
-
-			Ray ray = CollisionDetection::BuildRayFromMouse(world.GetMainCamera());
-
-			RayCollision closestCollision;
-			if (world.Raycast(ray, closestCollision, true)) {
-				selectionObject = (GameObject*)closestCollision.node;
-
-				selectionObject->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1));
-				return true;
-			}
-			else {
-				return false;
-			}
-		}
-		if (Window::GetKeyboard()->KeyPressed(NCL::KeyCodes::L)) {
-			if (selectionObject) {
-				if (lockedObject == selectionObject) {
-					lockedObject = nullptr;
-				}
-				else {
-					lockedObject = selectionObject;
-				}
-			}
-		}
-	}
-	else {
-		Debug::Print("Press Q to change to select mode!", Vector2(5, 85));
-	}
-	return false;
-}
-
-void MyGame::MoveSelectedObject() {
-	Debug::Print("Click Force:" + std::to_string(forceMagnitude), Vector2(5, 90));
-	forceMagnitude += Window::GetMouse()->GetWheelMovement() * 100.0f;
-
-	if (!selectionObject) {
-		return;//we haven't selected anything!
-	}
-	//Push the selected object!
-	if (Window::GetMouse()->ButtonPressed(NCL::MouseButtons::Right)) {
-		Ray ray = CollisionDetection::BuildRayFromMouse(world.GetMainCamera());
-
-		RayCollision closestCollision;
-		if (world.Raycast(ray, closestCollision, true)) {
-			if (closestCollision.node == selectionObject) {
-				selectionObject->GetPhysicsObject()->AddForceAtPosition(ray.GetDirection() * forceMagnitude, closestCollision.collidedAt);
-			}
-		}
-	}
-}
-
-void MyGame::LockedObjectMovement() {
-	Matrix4 view = world.GetMainCamera().BuildViewMatrix();
-	Matrix4 camWorld = Matrix::Inverse(view);
-
-	Vector3 rightAxis = Vector3(camWorld.GetColumn(0)); //view is inverse of model!
-
-	//forward is more tricky -  camera forward is 'into' the screen...
-	//so we can take a guess, and use the cross of straight up, and
-	//the right axis, to hopefully get a vector that's good enough!
-
-	Vector3 fwdAxis = Vector::Cross(Vector3(0, 1, 0), rightAxis);
-	fwdAxis.y = 0.0f;
-	fwdAxis = Vector::Normalise(fwdAxis);
-
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::UP)) {
-		selectionObject->GetPhysicsObject()->AddForce(fwdAxis);
-	}
-
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::DOWN)) {
-		selectionObject->GetPhysicsObject()->AddForce(-fwdAxis);
-	}
-
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::NEXT)) {
-		selectionObject->GetPhysicsObject()->AddForce(Vector3(0, -10, 0));
-	}
-}
-
-void MyGame::DebugObjectMovement() {
-	//If we've selected an object, we can manipulate it with some key presses
-	if (inSelectionMode && selectionObject) {
-		//Twist the selected object!
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::LEFT)) {
-			selectionObject->GetPhysicsObject()->AddTorque(Vector3(-10, 0, 0));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::RIGHT)) {
-			selectionObject->GetPhysicsObject()->AddTorque(Vector3(10, 0, 0));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::NUM7)) {
-			selectionObject->GetPhysicsObject()->AddTorque(Vector3(0, 10, 0));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::NUM8)) {
-			selectionObject->GetPhysicsObject()->AddTorque(Vector3(0, -10, 0));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::RIGHT)) {
-			selectionObject->GetPhysicsObject()->AddTorque(Vector3(10, 0, 0));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::UP)) {
-			selectionObject->GetPhysicsObject()->AddForce(Vector3(0, 0, -10));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::DOWN)) {
-			selectionObject->GetPhysicsObject()->AddForce(Vector3(0, 0, 10));
-		}
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::NUM5)) {
-			selectionObject->GetPhysicsObject()->AddForce(Vector3(0, -10, 0));
-		}
-	}
-}
-
 void MyGame::BridgeConstraintTest() {
 	Vector3 cubeSize = Vector3(8, 8, 8);
 
@@ -625,7 +538,7 @@ void MyGame::BridgeConstraintTest() {
 	world.AddConstraint(constraint);
 }
 
-// --- 关卡搭建核心逻辑 ---
+// Core Logic of Level Building
 void MyGame::InitCourierLevel() {
 
 	// Add player
@@ -637,51 +550,49 @@ void MyGame::InitCourierLevel() {
 	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 0, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
 	world.AddGameObject(packageObject);
 
-	// 1. 添加地板
-	// 位置在 Y=-20，大小足够大
-	AddFloorToWorld(Vector3(0, -20, 0));
+	AddSphereToWorld(Vector3(-55, 0, 60), 2.0f, 1.0f); // test sphere above package
+	cubeStone = AddCubeToWorld(Vector3(-45, 0, 60), Vector3(1, 1, 1), 1.0f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
-	// 2. 构建边界墙壁 (Static Cubes, Mass = 0)
-	// 假设游戏区域大概是 200x200 
+	// Add coins at various locations, mass = 0 for floating
+	AddCoinToWorld(Vector3(-50, -15, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(-50, -15, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(10, -15, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+
+	// Build terrain and obstacles
+	AddFloorToWorld(Vector3(0, -20, 0)); // floor
+
+	// walls
 	float wallHeight = 20.0f;
 	float boundarySize = 100.0f;
 	float wallThickness = 2.0f;
-
-	// 北南西东4墙
 	AddCubeToWorld(Vector3(0, -20 + wallHeight, -boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
 	AddCubeToWorld(Vector3(0, -20 + wallHeight, boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
 	AddCubeToWorld(Vector3(-boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
 	AddCubeToWorld(Vector3(boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
 
-	// 3. 放置内部障碍物 (构成简单的迷宫或路径)
-	// 示例：左侧的一个长条障碍
+	// obstacles
 	AddCubeToWorld(Vector3(-30, -10, 0), Vector3(2, 10, 40), 0.0f);
-	// 示例：右侧的一个平台
 	AddCubeToWorld(Vector3(40, -15, 20), Vector3(10, 5, 10), 0.0f);
 
-	// 4. 放置终点区域 (Delivery Zone)
-	// 使用绿色的半透明方块表示，无碰撞或设为 Trigger (这里先设为普通静态物体，视觉上区分)
+	// Destination zone, green area, now it is static
 	Vector3 targetPos = Vector3(60, -18, -60);
 	targetZone = AddCubeToWorld(targetPos, Vector3(10, 1, 10), 0.0f);
 	if (targetZone && targetZone->GetRenderObject()) {
-		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // 绿色半透明
+		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // set green with some transparency
 	}
 
-	// 5. 谜题元素：门和压力板
-	// 压力板 (黄色)
+	// Pressure plate
 	pressurePlate = AddCubeToWorld(Vector3(0, -18, 40), Vector3(5, 0.5f, 5), 0.0f);
 	if (pressurePlate && pressurePlate->GetRenderObject()) {
-		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // 黄色
+		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // yellow
 	}
-
-	// 门 (蓝色，阻挡路径)
-	// 放置在通往终点的必经之路上
+	// Door controlled by pressure plate
 	puzzleDoor = AddCubeToWorld(Vector3(60, -10, -30), Vector3(15, 10, 2), 0.0f);
 	if (puzzleDoor && puzzleDoor->GetRenderObject()) {
-		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // 蓝色
+		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // blue
 	}
 
-	// --- Enemy 简单 AI 设置 ---
+	// Simple Enemy AI Setup
 	Vector3 enemyStartPos = Vector3(0, 0, 0);
 	std::vector<Vector3> aiPath;
 	float pathY = -16.0f;
@@ -689,7 +600,6 @@ void MyGame::InitCourierLevel() {
 	aiPath.push_back(Vector3(20, pathY, -20));
 	aiPath.push_back(Vector3(-20, pathY, -20));
 	aiPath.push_back(Vector3(-20, pathY, 20));
-
 	// Add Enemy (RED) that patrols and targets the player
 	StateGameObject* enemy = AddEnemyToWorld(enemyStartPos);
 	enemy->SetPatrolPath(aiPath);
@@ -705,5 +615,4 @@ void MyGame::InitCourierLevel() {
 	gooseNPC = AddGooseNPCToWorld(Vector3(-20, 0, -20));
 	//world.AddGameObject(gooseNPC);  // BUG
 	//rivalAI = AddRivalAIToWorld(Vector3(20, 0, 20));
-
 }

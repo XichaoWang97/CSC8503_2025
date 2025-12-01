@@ -21,7 +21,7 @@ namespace NCL {
 		class PhysicsSystem;
 		class GameWorld;
 		class GameObject;
-		class PositionConstraint; // For the pressure plate/door puzzle
+		class PositionConstraint;
 
 		class MyGame {
 		public:
@@ -30,16 +30,13 @@ namespace NCL {
 
 			virtual void UpdateGame(float dt);
 
-			// --- 任务 2.1 新增: 公开重置接口 ---
+			// Reset the game to the initial state
 			void ResetGame() {
 				InitWorld();
 			}
-			// --- 任务 2.1 新增: 获取核心系统引用 (供状态机 Update 使用) ---
+
 			GameWorld* GetGameWorld() const { return &world; }
 			PhysicsSystem* GetPhysics() const { return &physics; }
-
-			// --- 新增：供外部(如AI)调用的接口 ---
-			void OnCharacterInput(GameObject* character, bool isFirePressed, Vector3 aimDir);
 
 		protected:
 			void InitCamera();
@@ -50,22 +47,28 @@ namespace NCL {
 			// Add specific game objects to the world
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f); // also as stones
-			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f);
+			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f, std::string name = "Terrain");
+			GameObject* AddCoinToWorld(const NCL::Maths::Vector3& position, Vector3 dimensions, float inverseMass = 1.0f);
 			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
 
 			RivalAI* AddRivalAIToWorld(const NCL::Maths::Vector3& position);
 			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position);
 
-			// --- 任务 0.2 新增: 关卡特定对象指针 ---
-			GameObject* targetZone = nullptr;   // 终点区域
-			GameObject* puzzleDoor = nullptr;   // 谜题门
-			GameObject* pressurePlate = nullptr; // 压力板
-			// --- 任务 0.3 新增: 玩家指针与控制 ---
+			// pointers to specific game objects
+			GameObject* targetZone = nullptr;  // destination
+			GameObject* puzzleDoor = nullptr;
+			GameObject* pressurePlate = nullptr;
+			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
+			GameObject* coinBonus = nullptr;  // bonus coin
 			Player* playerObject = nullptr;
-			
-			// --- 任务 1.4 新增: 创建易碎包裹 ---
 			FragileGameObject* packageObject = nullptr;
-			
+
+			// About coin and score
+			int score = 0;
+			const int winningScore = 3; // score needed to win
+			bool isGameWon = false;
+			std::vector<GameObject*> coins; // coin list
+
 			GameWorld& world;
 			GameTechRendererInterface& renderer;
 			PhysicsSystem& physics;
@@ -81,7 +84,7 @@ namespace NCL {
 			Rendering::Mesh* capsuleMesh = nullptr;
 			Rendering::Mesh* cubeMesh = nullptr;
 			Rendering::Mesh* sphereMesh = nullptr;
-
+			Rendering::Mesh* coinMesh = nullptr;
 			Rendering::Texture* defaultTex = nullptr;
 			Rendering::Texture* checkerTex = nullptr;
 			Rendering::Texture* glassTex = nullptr;
@@ -120,13 +123,6 @@ namespace NCL {
 				PositionConstraint* constraint; // 那个物理约束
 			};
 			std::vector<GrappleInfo> activeGrapples; // 当前所有的抓取关系
-
-			// ---------------------
-			bool SelectObject();
-			void MoveSelectedObject();
-			void DebugObjectMovement();
-			void LockedObjectMovement();
-			// ---------------------
 		};
 	}
 }

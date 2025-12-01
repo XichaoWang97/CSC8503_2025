@@ -34,7 +34,7 @@ namespace NCL::CSC8503 {
                 float dist = collision.rayDistance;
 
                 if (dist < 30.0f) {
-                    if (target->GetName() == "Stone" || target->GetName() == "FragilePackage") {
+                    if (target->GetName() == "Stone" || target->GetName() == "FragilePackage" || target->GetName()=="CubeStone") {
                         AttachItem(target);
                     }
                 }
@@ -48,9 +48,9 @@ namespace NCL::CSC8503 {
             DropHeldItem(); // drop constraint
 			
             // add force
-            float throwForce = 80.0f;
-            if (item->GetName() == "FragilePackage") {
-				throwForce = 1.0f; // slightly throw fragile package
+            float throwForce = 1.0f;
+            if (item->GetName() == "Stone") {
+				throwForce = 150.0f; // slightly throw fragile package
             }
             item->GetPhysicsObject()->ApplyLinearImpulse(aimDir * throwForce);
         }

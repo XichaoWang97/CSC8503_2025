@@ -127,7 +127,7 @@ void Player::PlayerControl(float dt) {
     // 8. 跳跃
     if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
         if (IsPlayerOnGround()) { // 调用不带参数的版本
-            phys->ApplyLinearImpulse(Vector3(0, 20, 0));
+            phys->ApplyLinearImpulse(Vector3(0, 15, 0));
         }
     }
 }
