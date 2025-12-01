@@ -27,12 +27,49 @@ namespace NCL {
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
 				Debug::Print("Paused", Vector2(45, 40), Debug::WHITE);
 				Debug::Print("Press ESC to Unpause", Vector2(35, 50), Debug::WHITE);
-				
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					return PushdownResult::Pop;
 				}
-				
+
+				return PushdownResult::NoChange;
+			}
+		protected:
+			MyGame* game;
+		};
+
+		// DeadState
+		class DeadState : public PushdownState {
+		public:
+			DeadState(MyGame* g) : game(g) {}
+			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
+				Debug::Print("YOU DIED", Vector2(40, 40), Debug::RED);
+				Debug::Print("The Goose got you!", Vector2(30, 50), Debug::RED);
+				Debug::Print("Press F1 to Restart", Vector2(30, 60), Debug::RED);
+
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
+					game->ResetGame();
+					return PushdownResult::Pop;
+				}
+				return PushdownResult::NoChange;
+			}
+		protected:
+			MyGame* game;
+		};
+
+		// WinState
+		class WinState : public PushdownState {
+		public:
+			WinState(MyGame* g) : game(g) {}
+			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
+				Debug::Print("MISSION SUCCESS!", Vector2(35, 40), Debug::GREEN);
+				Debug::Print("Coins Collected!", Vector2(35, 50), Debug::GREEN);
+				Debug::Print("Press F1 to Restart", Vector2(30, 60), Debug::GREEN);
+
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
+					game->ResetGame();
+					return PushdownResult::Pop;
+				}
 				return PushdownResult::NoChange;
 			}
 		protected:
@@ -54,14 +91,26 @@ namespace NCL {
 				physics->Update(dt);
 				world->UpdateWorld(dt);
 
-				Debug::Print("Press ESC to Pause", Vector2(5, 5), Debug::WHITE);
-				Debug::Print("Press E to Return to Main Menu", Vector2(5, 10), Debug::WHITE);
+				// check game over conditions
+				if (game->IsGameOver()) {
+					*newState = new DeadState(game);
+					return PushdownResult::Push;
+				}
+
+				// check game win conditions
+				if (game->IsGameWon()) {
+					*newState = new WinState(game);
+					return PushdownResult::Push;
+				}
+
+				Debug::Print("Press ESC to Pause", Vector2(5, 5), Debug::YELLOW);
+				Debug::Print("Press 1 to Return to Main Menu", Vector2(5, 10), Debug::YELLOW);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					*newState = new PauseState(game);
 					return PushdownResult::Push;
 				}
-				if (Window::GetKeyboard()->KeyPressed(KeyCodes::E)) {
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM1)) {
 					return PushdownResult::Pop;
 				}
 

@@ -195,11 +195,9 @@ void MyGame::UpdateGame(float dt) {
 
 		if (isTriggered) {
 			pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // 激活变绿
-			Debug::Print("Gate Open!", Vector2(45, 80), Debug::GREEN);
 		}
 		else {
 			pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // 默认黄色
-			Debug::Print("Gate Closed - Find the Plate", Vector2(30, 80), Debug::YELLOW);
 		}
 	}
 
@@ -210,12 +208,14 @@ void MyGame::UpdateGame(float dt) {
 
 		// calculate distance to player
 		float dist = Vector::Length((playerObject->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
-
-		// collection radius 2.5f
-		if (dist < 2.5f) {
-			world.RemoveGameObject(c, true); // remove coin from world
-			score++;
-			coins.erase(coins.begin() + i); // remove coin from vector
+		GameObject* playerHeld = playerObject->GetHeldItem();
+		// collection radius 2.5f, need FragilePackage to collect
+		if (playerHeld) {
+			if (dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
+				world.RemoveGameObject(c, true); // remove coin from world
+				score++;
+				coins.erase(coins.begin() + i); // remove coin from vector
+			}
 		}
 	}
 
@@ -238,25 +238,23 @@ void MyGame::UpdateGame(float dt) {
 			Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
 		}
 	}
+	// Death Condition - hit by goose
+	if (!isGameOver && !isGameWon && playerObject && gooseNPC) {
+		Vector3 pPos = playerObject->GetTransform().GetPosition();
+		Vector3 gPos = gooseNPC->GetTransform().GetPosition();
 
-	// --- 3. UI 界面显示 (UI Display) ---
-	if (isGameWon) {
-		// 胜利界面
-		Debug::Print("MISSION SUCCESS!", Vector2(35, 40), Vector4(0, 1, 0, 1));
-		Debug::Print("Score: " + std::to_string(score) + "/" + std::to_string(winningScore), Vector2(40, 50), Vector4(1, 1, 0, 1));
-		Debug::Print("Press F1 to Return/Restart", Vector2(30, 60), Vector4(1, 1, 1, 1));
-
-		// 这里可以添加逻辑暂停游戏，或者等待按键返回主菜单
-		// 比如: if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) { ResetGame(); ... }
+		// 简单的距离检测：如果距离小于 2.0 米，视为被撞
+		float dist = Vector::Length((pPos - gPos));
+		if (dist < 2.0f) {
+			isGameOver = true;
+		}
 	}
-	else {
-		// 游戏进行中的 HUD
-		std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
 
-		// 根据是否收集满显示不同颜色
-		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
-		Debug::Print(scoreText, Vector2(5, 10), scoreColor); // 左上角显示
-	}
+	// 游戏进行中的 HUD
+	std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
+	// 根据是否收集满显示不同颜色
+	Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
+	Debug::Print(scoreText, Vector2(75, 10), scoreColor); // 左上角显示
 	//----------------------------------------------------------------------------------
 	
 	// player object update
@@ -320,12 +318,15 @@ void MyGame::InitCamera() {
 	world.GetMainCamera().SetPitch(-15.0f);
 	world.GetMainCamera().SetYaw(315.0f);
 	world.GetMainCamera().SetPosition(Vector3(-60, 40, 60));
-	lockedObject = nullptr;
 }
 
 void MyGame::InitWorld() {
 	world.ClearAndErase();
 	physics.Clear();
+	// 好像无效了？
+	score = 0;
+	isGameOver = false;
+	isGameWon = false;
 
 	InitCourierLevel();
 }

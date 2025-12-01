@@ -38,6 +38,9 @@ namespace NCL {
 			GameWorld* GetGameWorld() const { return &world; }
 			PhysicsSystem* GetPhysics() const { return &physics; }
 
+			bool IsGameOver() const { return isGameOver; }
+			bool IsGameWon()  const { return isGameWon; }
+
 		protected:
 			void InitCamera();
 			void InitWorld();
@@ -66,8 +69,11 @@ namespace NCL {
 			// About coin and score
 			int score = 0;
 			const int winningScore = 3; // score needed to win
-			bool isGameWon = false;
 			std::vector<GameObject*> coins; // coin list
+			// win or lose
+			bool isGameOver = false;
+			bool isGameWon = false;
+
 
 			GameWorld& world;
 			GameTechRendererInterface& renderer;
@@ -81,6 +87,14 @@ namespace NCL {
 
 			GameObject* selectionObject = nullptr;
 
+			
+
+			// Meshes Textures and Materials
+			Rendering::Mesh* catMesh = nullptr;
+			Rendering::Mesh* kittenMesh = nullptr;
+			Rendering::Mesh* enemyMesh = nullptr;
+			Rendering::Mesh* bonusMesh = nullptr;
+			Rendering::Mesh* gooseMesh = nullptr;
 			Rendering::Mesh* capsuleMesh = nullptr;
 			Rendering::Mesh* cubeMesh = nullptr;
 			Rendering::Mesh* sphereMesh = nullptr;
@@ -88,24 +102,9 @@ namespace NCL {
 			Rendering::Texture* defaultTex = nullptr;
 			Rendering::Texture* checkerTex = nullptr;
 			Rendering::Texture* glassTex = nullptr;
-
-			//Coursework Meshes
-			Rendering::Mesh* catMesh = nullptr;
-			Rendering::Mesh* kittenMesh = nullptr;
-			Rendering::Mesh* enemyMesh = nullptr;
-			Rendering::Mesh* bonusMesh = nullptr;
-			Rendering::Mesh* gooseMesh = nullptr;
-
 			GameTechMaterial checkerMaterial;
 			GameTechMaterial glassMaterial;
 			GameTechMaterial notexMaterial;
-
-			//Coursework Additional functionality	
-			GameObject* lockedObject = nullptr;
-			NCL::Maths::Vector3 lockedOffset = NCL::Maths::Vector3(0, 14, 20);
-			void LockCameraToObject(GameObject* o) {
-				lockedObject = o;
-			}
 
 			GameObject* objClosest = nullptr;
 
