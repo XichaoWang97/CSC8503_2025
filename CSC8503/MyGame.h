@@ -6,6 +6,7 @@
 #include "NavigationGrid.h"
 #include "GooseNPC.h"
 #include "RivalAI.h"
+#include "Player.h"
 
 namespace NCL {
 	class Controller;
@@ -37,6 +38,9 @@ namespace NCL {
 			GameWorld* GetGameWorld() const { return &world; }
 			PhysicsSystem* GetPhysics() const { return &physics; }
 
+			// --- 新增：供外部(如AI)调用的接口 ---
+			void OnCharacterInput(GameObject* character, bool isFirePressed, Vector3 aimDir);
+
 		protected:
 			void InitCamera();
 			void InitWorld();
@@ -44,9 +48,8 @@ namespace NCL {
 			void InitCourierLevel();
 
 			// Add specific game objects to the world
-			GameObject* AddPlayerToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
-			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f);
+			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f); // also as stones
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f);
 			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
 
@@ -58,12 +61,9 @@ namespace NCL {
 			GameObject* puzzleDoor = nullptr;   // 谜题门
 			GameObject* pressurePlate = nullptr; // 压力板
 			// --- 任务 0.3 新增: 玩家指针与控制 ---
-			GameObject* playerObject = nullptr;
-			virtual void PlayerControl(float dt);
-			// --- 修复跳跃: 射线检测地面 ---
-			bool IsPlayerOnGround(GameObject* obj);
+			Player* playerObject = nullptr;
+			
 			// --- 任务 1.4 新增: 创建易碎包裹 ---
-			FragileGameObject* AddFragilePackageToWorld(const NCL::Maths::Vector3& position);
 			FragileGameObject* packageObject = nullptr;
 			
 			GameWorld& world;
@@ -108,10 +108,18 @@ namespace NCL {
 
 			void BridgeConstraintTest();
 
-			// [新增] 用于存储导航网格
+			// 用于存储导航网格
 			NavigationGrid* navGrid = nullptr;
 			GooseNPC* gooseNPC = nullptr;
 			RivalAI* rivalAI = nullptr;
+
+			// --- 抓取系统核心结构 ---
+			struct GrappleInfo {
+				GameObject* holder;       // 谁拿着
+				GameObject* item;         // 拿着什么
+				PositionConstraint* constraint; // 那个物理约束
+			};
+			std::vector<GrappleInfo> activeGrapples; // 当前所有的抓取关系
 
 			// ---------------------
 			bool SelectObject();

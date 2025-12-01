@@ -96,7 +96,7 @@ endif()
 ################################################################################
 # Target
 ################################################################################
-add_executable(${PROJECT_NAME}  ${ALL_FILES} "MyGame.h" "MyGame.cpp" "GameStates.h"  "GooseNPC.h" "GooseNPC.cpp")
+add_executable(${PROJECT_NAME}  ${ALL_FILES} "MyGame.h" "MyGame.cpp" "GameStates.h"  "GooseNPC.h" "GooseNPC.cpp" "GameCharacter.h" "Player.h" "Player.cpp")
 
 use_props(${PROJECT_NAME} "${CMAKE_CONFIGURATION_TYPES}" "${DEFAULT_CXX_PROPS}")
 set(ROOT_NAMESPACE CSC8503)

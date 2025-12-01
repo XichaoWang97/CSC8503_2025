@@ -150,10 +150,10 @@ void MyGame::UpdateGame(float dt) {
 	if (packageObject) {
 		float health = packageObject->GetHealth();
 		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
-		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(5, 10), col);
+		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
 
 		if (packageObject->IsBroken()) {
-			Debug::Print("GAME OVER: PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
+			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
 		}
 	}
 
@@ -209,13 +209,13 @@ void MyGame::UpdateGame(float dt) {
 		}
 	}
 
-	// --- 任务 0.3: 玩家控制 ---
-	// 只有当并不是在自由视角模式(SelectionMode)下，且玩家存在时才允许控制
+	// player object update
 	if (!inSelectionMode && playerObject) {
-		PlayerControl(dt);
-		// 显示操作提示
-		Debug::Print("WASD: Move", Vector2(5, 80), Debug::WHITE);
-		Debug::Print("SPACE: Jump", Vector2(5, 85), Debug::WHITE);
+		playerObject->Update(dt);
+	}
+	// package object update
+	if(packageObject) {
+		packageObject->Update(dt);
 	}
 
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
@@ -374,38 +374,7 @@ GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, 
 	return cube;
 }
 
-GameObject* MyGame::AddPlayerToWorld(const Vector3& position) {
-	float meshSize = 1.0f;
-	float inverseMass = 0.5f;
-
-	GameObject* character = new GameObject("player");
-	SphereVolume* volume = new SphereVolume(0.5f);
-
-	character->SetBoundingVolume(volume);
-
-	character->GetTransform()
-		.SetScale(Vector3(meshSize, meshSize, meshSize))
-		.SetPosition(position);
-
-	character->SetRenderObject(new RenderObject(character->GetTransform(), catMesh, notexMaterial));
-	character->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1)); // 给玩家设置特殊颜色 (例如青色 Cyan)
-
-	PhysicsObject* physicsObj = new PhysicsObject(character->GetTransform(), character->GetBoundingVolume());
-	physicsObj->SetInverseMass(inverseMass);
-	physicsObj->InitSphereInertia();
-
-	// --- 改动 3: 取消弹跳 ---
-	physicsObj->SetElasticity(0.0f); // 设为 0，落地不反弹
-	// physicsObj->SetFriction(0.8f); // 可以增加摩擦力，但这通常用于物体之间的接触计算，这里主要靠我们手写的刹车逻辑
-
-	character->SetPhysicsObject(physicsObj);
-
-	world.AddGameObject(character);
-
-	return character;
-}
-
-RivalAI* MyGame::AddRivalAIToWorld(const Vector3& position) {
+/*RivalAI* MyGame::AddRivalAIToWorld(const Vector3& position) {
 	float meshSize = 1.0f;
 	float inverseMass = 0.5f;
 
@@ -436,7 +405,7 @@ RivalAI* MyGame::AddRivalAIToWorld(const Vector3& position) {
 	world.AddGameObject(rival);
 
 	return rival;
-}
+}*/
 
 StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	float meshSize = 3.0f;
@@ -658,6 +627,16 @@ void MyGame::BridgeConstraintTest() {
 
 // --- 关卡搭建核心逻辑 ---
 void MyGame::InitCourierLevel() {
+
+	// Add player
+	Vector3 playerStartPos = Vector3(-60, 5, 60);
+	playerObject = new Player(&world, playerStartPos, catMesh, notexMaterial, Vector4(0, 1, 1, 1)); //cyan color
+	world.AddGameObject(playerObject);
+
+	// Add packageObject
+	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 0, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
+	world.AddGameObject(packageObject);
+
 	// 1. 添加地板
 	// 位置在 Y=-20，大小足够大
 	AddFloorToWorld(Vector3(0, -20, 0));
@@ -702,12 +681,6 @@ void MyGame::InitCourierLevel() {
 		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // 蓝色
 	}
 
-	// --- 任务 0.3 修改: 将返回值存入 playerObject ---
-	Vector3 playerStartPos = Vector3(-60, 5, 60);
-	playerObject = AddPlayerToWorld(playerStartPos);
-	// --- 任务 1.4: 使用 FragileGameObject 创建包裹 ---
-	packageObject = AddFragilePackageToWorld(Vector3(-50, 2, 60)); // 放低一点，防止落地直接摔坏
-
 	// --- Enemy 简单 AI 设置 ---
 	Vector3 enemyStartPos = Vector3(0, 0, 0);
 	std::vector<Vector3> aiPath;
@@ -730,141 +703,7 @@ void MyGame::InitCourierLevel() {
 	}
 	// Add Goose NPC and rival AI
 	gooseNPC = AddGooseNPCToWorld(Vector3(-20, 0, -20));
-	rivalAI = AddRivalAIToWorld(Vector3(20, 0, 20));
+	//world.AddGameObject(gooseNPC);  // BUG
+	//rivalAI = AddRivalAIToWorld(Vector3(20, 0, 20));
 
-}
-
-// --- 现代 ARPG 控制实现 ---
-void MyGame::PlayerControl(float dt) {
-	if (!playerObject) return;
-
-	PhysicsObject* phys = playerObject->GetPhysicsObject();
-	if (!phys) return;
-
-	Transform& transform = playerObject->GetTransform();
-
-	float forceMagnitude = 60.0f;
-	float maxSpeed = 15.0f;
-	float rotationSpeed = 10.0f; // 转向速度 (Lerp factor)
-
-	// 1. 获取相机的视角 (只取 Yaw)
-	float yaw = world.GetMainCamera().GetYaw();
-	Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, yaw, 0);
-
-	// 2. 构建本地输入向量 (Local Input)
-	// W = 前 (0,0,-1), S = 后 (0,0,1), A = 左 (-1,0,0), D = 右 (1,0,0)
-	Vector3 inputDir(0, 0, 0);
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) inputDir.z -= 1;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) inputDir.z += 1;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) inputDir.x -= 1;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) inputDir.x += 1;
-
-	bool isMoving = (Vector::LengthSquared(inputDir) > 0);
-
-	if (isMoving) {
-		// 归一化输入，防止斜向移动速度变快
-		inputDir = Vector::Normalise(inputDir);
-
-		// 3. 计算世界空间的目标移动方向
-		// 将本地输入 (相对于相机) 转换为世界方向
-		Vector3 targetDir = cameraRot * inputDir;
-
-		// 4. 自动转向 (Auto-Rotate)
-		// 计算目标朝向的四元数, 创建一个从 (0,0,0) 看向 targetDir 的旋转
-		Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), -targetDir, Vector3(0, 1, 0));
-		Quaternion targetOrientation(Matrix::Inverse(lookAtMat));
-
-		// 使用 Slerp 平滑插值当前朝向到目标朝向
-		Quaternion currentOrientation = transform.GetOrientation();
-		// --- 修复: 四元数最短路径检查 (Shortest Path Check) ---
-		// 如果两个四元数的点积 < 0，说明它们夹角 > 90度，插值会走长路径（例如 270 度）。
-		// 将其中一个四元数取反，可以保证走短路径（90 度）。
-		float dot = Quaternion::Dot(currentOrientation, targetOrientation);
-		if (dot < 0.0f) {
-			targetOrientation.x = -targetOrientation.x;
-			targetOrientation.y = -targetOrientation.y;
-			targetOrientation.z = -targetOrientation.z;
-			targetOrientation.w = -targetOrientation.w;
-		}
-
-		Quaternion newOrientation = Quaternion::Slerp(currentOrientation, targetOrientation, rotationSpeed * dt);
-
-		transform.SetOrientation(newOrientation);
-		phys->SetAngularVelocity(Vector3(0, 0, 0));
-
-		// 5.Apply Force
-		phys->AddForce(targetDir * forceMagnitude);
-	}
-
-	// 6. 速度限制 (Speed Limit)
-	Vector3 velocity = phys->GetLinearVelocity();
-	Vector3 planarVelocity(velocity.x, 0, velocity.z);
-
-	if (Vector::Length(planarVelocity) > maxSpeed) {
-		planarVelocity = Vector::Normalise(planarVelocity) * maxSpeed;
-		phys->SetLinearVelocity(Vector3(planarVelocity.x, velocity.y, planarVelocity.z));
-	}
-
-	// 7. 刹车逻辑 (Damping)
-	if (!isMoving) {
-		if (Vector::Length(planarVelocity) > 0.1f) {
-			float dampingFactor = 5.0f;
-			phys->AddForce(-planarVelocity * dampingFactor);
-		}
-	}
-
-	// 8. 跳跃
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-		if (IsPlayerOnGround(playerObject)) {
-			phys->ApplyLinearImpulse(Vector3(0, 20, 0));
-		}
-	}
-}
-
-// --- 使用射线检测地面 ---
-bool MyGame::IsPlayerOnGround(GameObject* obj) {
-	if (!obj) return false;
-
-	// 获取玩家位置
-	Vector3 playerPos = obj->GetTransform().GetPosition();
-
-	// 向下发射射线
-	Ray ray(playerPos, Vector3(0, -1, 0));
-	RayCollision collision;
-
-	// 玩家半径是 1.0 (在 AddPlayerToWorld 里定义的)
-	// 我们检测距离稍微大一点点 (1.1)，允许轻微的误差或斜坡检测
-	float groundCheckDist = 1.1f;
-
-	// 使用 Raycast，记得传入 playerObject 以忽略自身
-	if (world.Raycast(ray, collision, true, obj)) {
-		if (collision.rayDistance < groundCheckDist) {
-			return true; // 碰到了地面或物体
-		}
-	}
-
-	return false;
-}
-
-// --- 任务 1.4: 实现包裹创建函数 ---
-FragileGameObject* MyGame::AddFragilePackageToWorld(const Vector3& position) {
-	FragileGameObject* package = new FragileGameObject("FragilePackage");
-
-	SphereVolume* volume = new SphereVolume(1.0f);
-	package->SetBoundingVolume(volume);
-	package->GetTransform().SetScale(Vector3(1, 1, 1)).SetPosition(position);
-
-	package->SetRenderObject(new RenderObject(package->GetTransform(), bonusMesh, glassMaterial));
-	package->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // 初始蓝色 (满血)
-
-	PhysicsObject* physicsObj = new PhysicsObject(package->GetTransform(), package->GetBoundingVolume());
-	physicsObj->SetInverseMass(1.0f);
-	physicsObj->InitSphereInertia();
-	physicsObj->SetElasticity(0.3f); // 低弹性，防止弹得太厉害
-
-	package->SetPhysicsObject(physicsObj);
-
-	world.AddGameObject(package);
-
-	return package;
 }

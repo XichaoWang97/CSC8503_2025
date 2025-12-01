@@ -1,65 +1,127 @@
 #include "FragileGameObject.h"
 #include "PhysicsObject.h"
 #include "RenderObject.h"
+#include "PhysicsSystem.h"
 #include "Debug.h"
-#include <iostream> // For debug output
+#include <iostream>
 
 using namespace NCL;
 using namespace CSC8503;
 using namespace Maths;
 
-FragileGameObject::FragileGameObject(const std::string& name) : GameObject(name) {
+FragileGameObject::FragileGameObject(const std::string& name, const Vector3& position,
+    Rendering::Mesh* mesh, GameTechMaterial material, Vector4 colour) : GameObject(name) {
+	
+	// set properties
+    initialPosition = position;
     maxHealth = 100.0f;
     health = maxHealth;
     isBroken = false;
+
+	// set physics volume
+    SphereVolume* volume = new SphereVolume(1.0f);
+    SetBoundingVolume(volume);
+
+	// set position
+    GetTransform().SetScale(Vector3(1, 1, 1)).SetPosition(position);
+
+	// set render object
+    SetRenderObject(new RenderObject(GetTransform(), mesh, material));
+    GetRenderObject()->SetColour(colour);
+
+    PhysicsObject* physicsObj = new PhysicsObject(GetTransform(), GetBoundingVolume());
+    physicsObj->SetInverseMass(1.0f);
+    physicsObj->InitSphereInertia();
+	physicsObj->SetElasticity(0.3f); // low bounciness to prevent excessive bouncing
+
+    SetPhysicsObject(physicsObj);
 }
 
 FragileGameObject::~FragileGameObject() {
 }
 
+// Deal with respawn timer
+void FragileGameObject::Update(float dt) {
+    if (isBroken) {
+        timer -= dt;
+
+        Debug::Print("Package respawning in: " + std::to_string((int)timer + 1), Vector2(40, 55), Vector4(1, 0, 0, 1));
+
+        if (timer <= 0.0f) {
+            Reset();
+        }
+    }
+}
+
 void FragileGameObject::OnCollisionBegin(GameObject* otherObject) {
-    if (isBroken) return; // 已经碎了就不再计算
+    if (isBroken) return;
 
     PhysicsObject* myPhys = GetPhysicsObject();
     if (!myPhys) return;
 
-    // 获取对方的速度 (如果是静态物体，速度为0)
+	// get other object's velocity
     Vector3 otherVel = Vector3(0, 0, 0);
     if (otherObject->GetPhysicsObject()) {
         otherVel = otherObject->GetPhysicsObject()->GetLinearVelocity();
     }
 
-    // 计算相对速度
+	// calculate relative velocity
     Vector3 myVel = myPhys->GetLinearVelocity();
     Vector3 relVel = myVel - otherVel;
     float impactSpeed = Vector::Length(relVel);
 
-    // 设定伤害阈值 (只有超过这个速度才算伤害)
-    float damageThreshold = 10.0f;
+	// Setting threshold: If velocity is bigger that threshold, package will take damage.
+	// set a safe threshold to avoid player collisions and constraint causing damage
+    float damageThreshold = 40.0f;
 
     if (impactSpeed > damageThreshold) {
-        // 伤害公式：速度越快，伤害越高
+		// calculate damage
         float damage = (impactSpeed - damageThreshold) * 2.0f;
         health -= damage;
-
-        std::cout << "Package Hit! Speed: " << impactSpeed << " Damage: " << damage << " HP: " << health << std::endl;
 
         if (health <= 0) {
             health = 0;
             isBroken = true;
-            // 视觉反馈：变红表示破碎
-            if (GetRenderObject()) {
-                GetRenderObject()->SetColour(Vector4(1, 0, 0, 1));
-            }
-            Debug::Print("PACKAGE DESTROYED!", Vector2(30, 50), Vector4(1, 0, 0, 1));
+            timer = 5.0f;
+
+            // if destroyed, move it underground
+            GetTransform().SetPosition(Vector3(0, -9999, 0));
+			// close physics
+            GetPhysicsObject()->ClearForces();
+            GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+            GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
+            GetPhysicsObject()->SetInverseMass(0.0f);
         }
         else {
-            // 视觉反馈：受伤变橙色，逐渐变深
+			// get colour based on health
             if (GetRenderObject()) {
-                // 根据血量从 蓝色(100%) 渐变到 橙色(0%)
+				// from blue (healthy) to red (damaged)
                 float healthRatio = health / maxHealth;
                 GetRenderObject()->SetColour(Vector4(1.0f - healthRatio, healthRatio * 0.5f, healthRatio, 1));
             }
         }
+    }
+}
+
+void FragileGameObject::Reset() {
+    isBroken = false;
+    health = maxHealth;
+    timer = 0.0f;
+
+	// reset position and orientation
+    GetTransform().SetPosition(initialPosition);
+    GetTransform().SetOrientation(Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+	// reset colour
+    if (GetRenderObject()) {
+        GetRenderObject()->SetColour(Vector4(0, 0, 1, 1));
+    }
+
+	// reset physics
+    if (GetPhysicsObject()) {
+        GetPhysicsObject()->ClearForces();
+        GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+        GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
+        GetPhysicsObject()->SetInverseMass(1.0f);
+        //GetPhysicsObject()->WakeUp();
     }
 }

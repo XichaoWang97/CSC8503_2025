@@ -11,12 +11,11 @@
 using namespace NCL;
 using namespace CSC8503;
 
-RivalAI::RivalAI(NavigationGrid* _grid) : GameObject("RivalAI") {
+RivalAI::RivalAI(GameWorld* world, NavigationGrid* _grid) : GameCharacter("RivalAI", world) {
     grid = _grid;
     currentTarget = nullptr;
     rootNode = nullptr;
     moveSpeed = 10.0f;
-    throwCooldown = 0.0f;
 
     BuildBehaviourTree();
 }
@@ -26,8 +25,6 @@ RivalAI::~RivalAI() {
 }
 
 void RivalAI::Update(float dt) {
-    if (throwCooldown > 0) throwCooldown -= dt;
-
     if (rootNode) {
         rootNode->Execute(dt);
     }
@@ -56,12 +53,13 @@ void RivalAI::BuildBehaviourTree() {
 
     // 组合逻辑
     BehaviourSequence* sequenceAttack = new BehaviourSequence("Attack Sequence");
-    sequenceAttack->AddChild(throwStone); // 简化：只要执行这个节点，内部会判断是否在范围内
+    sequenceAttack->AddChild(throwStone);
 
     BehaviourSequence* sequenceChase = new BehaviourSequence("Chase Sequence");
     sequenceChase->AddChild(moveToItem);
 
     BehaviourSelector* rootSelector = new BehaviourSelector("Root Selector");
+
     // 逻辑顺序：先尝试攻击 -> 如果不行(比如没目标或太远)尝试移动 -> 如果没目标尝试寻找
     rootSelector->AddChild(sequenceAttack);
     rootSelector->AddChild(sequenceChase);
@@ -71,7 +69,7 @@ void RivalAI::BuildBehaviourTree() {
 }
 
 BehaviourState RivalAI::FindTargetPacket(float dt) {
-    if (currentTarget && currentTarget->IsActive()) return Success; // 已经有目标
+    if (currentTarget && currentTarget->IsActive()) return Success; // have a target
 
     // 遍历世界寻找 FragileGameObject
     // 注意：这里需要遍历 GameWorld，简单的做法是使用 world iterator
@@ -97,7 +95,6 @@ BehaviourState RivalAI::FindTargetPacket(float dt) {
 
     if (bestObj) {
         currentTarget = bestObj;
-        Debug::Print("Rival found target!", Vector2(10, 60), Vector4(1, 0, 1, 1));
         return Success;
     }
 
@@ -110,10 +107,13 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
     Vector3 targetPos = currentTarget->GetTransform().GetPosition();
     Vector3 myPos = GetTransform().GetPosition();
     float dist = Vector::Length(targetPos - myPos);
-
+    // --- 核心修复：保留重力 ---
+    Vector3 currentVel = GetPhysicsObject()->GetLinearVelocity(); // 获取当前物理速度
+    //Vector3 targetVel = Vector::Normalise(dir) * moveSpeed;       // 计算目标水平速度
     // 如果距离足够近，可以停止移动并准备攻击
     if (dist < 15.0f) {
         GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+        GetPhysicsObject()->SetLinearVelocity(Vector3(0, currentVel.y, 0));
         return Failure; // 移动结束，把控制权交给 Attack Sequence
     }
 
@@ -128,7 +128,7 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
         Vector3 dir = nextWaypoint - myPos;
         dir.y = 0;
 
-        if (Vector::Length(dir) < 2.0f) {
+        if (Vector::Length(dir) < 3.0f) {
             pathPoints.erase(pathPoints.begin());
             return Ongoing;
         }
@@ -163,8 +163,6 @@ BehaviourState RivalAI::ThrowStone(float dt) {
     float dist = Vector::Length(currentTarget->GetTransform().GetPosition() - GetTransform().GetPosition());
     if (dist > 20.0f) return Failure; // 太远了，不能扔
 
-    if (throwCooldown > 0) return Ongoing; // 冷却中
-
     // 执行投掷
     Vector3 myPos = GetTransform().GetPosition();
     Vector3 targetPos = currentTarget->GetTransform().GetPosition();
@@ -192,10 +190,6 @@ BehaviourState RivalAI::ThrowStone(float dt) {
 
     float throwForce = 800.0f;
     stone->GetPhysicsObject()->AddForce(dir * throwForce);
-
-    throwCooldown = 3.0f; // 3秒冷却
-
-    Debug::Print("Rival Throws Stone!", Vector2(10, 65), Vector4(1, 0, 0, 1));
 
     // 如果是网络游戏，石头可能也需要同步，这里暂时作为仅服务器实体，或者自动销毁
     return Success;
