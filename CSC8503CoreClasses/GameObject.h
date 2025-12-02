@@ -1,6 +1,10 @@
 #pragma once
 #include "Transform.h"
 #include "CollisionVolume.h"
+#include "AABBVolume.h"
+#include "SphereVolume.h"
+#include "RenderObject.h"
+#include "PhysicsObject.h"
 
 using std::vector;
 
@@ -97,6 +101,13 @@ namespace NCL::CSC8503 {
 			return worldID;
 		}
 		
+		//  ^  ^
+		// < 'w' >
+		//  |   |  ------- NEW: Set renderer and physics functions -------  
+		void SetRenderProperties(Rendering::Mesh* mesh, float meshSize, const GameTechMaterial& material, const Vector4& colour);
+		void SetSpherePhysicsProperties(Vector3 position, float radius, float inverseMass);
+		void SetAABBphysicsProperties(Vector3 position, float inverseMass, Vector3 dimensions);
+
 	protected:
 		Transform			transform;
 

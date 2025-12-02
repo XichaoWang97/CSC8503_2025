@@ -54,7 +54,6 @@ namespace NCL {
 			GameObject* AddCoinToWorld(const NCL::Maths::Vector3& position, Vector3 dimensions, float inverseMass = 1.0f);
 			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
 
-			RivalAI* AddRivalAIToWorld(const NCL::Maths::Vector3& position);
 			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position);
 
 			// pointers to specific game objects
@@ -64,6 +63,7 @@ namespace NCL {
 			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
 			GameObject* coinBonus = nullptr;  // bonus coin
 			Player* playerObject = nullptr;
+			RivalAI* rivalAIObject = nullptr;
 			FragileGameObject* packageObject = nullptr;
 
 			// About coin and score

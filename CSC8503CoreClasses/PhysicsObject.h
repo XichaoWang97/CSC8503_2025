@@ -79,7 +79,7 @@ namespace NCL {
 				elasticity = newElasticity;
 			}
 
-			// 新增 Getter，供 PhysicsSystem 调用
+			// New Getter
 			float GetElasticity() const {
 				return elasticity;
 			}

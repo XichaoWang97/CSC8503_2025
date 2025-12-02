@@ -1,8 +1,6 @@
 #include "GooseNPC.h"
-#include "StateTransition.h"
-#include "StateMachine.h"
-#include "State.h"
 #include "PhysicsObject.h"
+#include "RenderObject.h"
 #include "Debug.h"
 
 using namespace NCL;
@@ -11,63 +9,89 @@ using namespace CSC8503;
 GooseNPC::GooseNPC(NavigationGrid* _grid, GameObject* _player) : StateGameObject("Goose") {
     grid = _grid;
     playerTarget = _player;
-    chaseSpeed = 15.0f; // faster chase
-    patrolSpeed = 8.0f;
+    chaseSpeed = 5.0f; // 追逐速度
+    rootNode = nullptr;
 
-    // state machine
-    // state 1: Wander / wait
-    State* stateWander = new State([&](float dt)->void {
-        this->Wander(dt);
-        Debug::Print("Goose: HONK! (Wander)", Vector2(10, 50), Vector4(1, 1, 0, 1));
-        }
-    );
-
-    // state 2: Chase
-    State* stateChase = new State([&](float dt)->void {
-        this->ChasePlayer(dt);
-        Debug::Print("Goose: CHASING!", Vector2(10, 50), Vector4(1, 0, 0, 1));
-        }
-    );
-
-    stateMachine->AddState(stateWander);
-    stateMachine->AddState(stateChase);
-
-    // see player -> Chase
-    stateMachine->AddTransition(new StateTransition(stateWander, stateChase, [&]()->bool {
-        return this->CanSeeTarget();
-        })
-    );
-
-    // can not see player -> Wander
-    stateMachine->AddTransition(new StateTransition(stateChase, stateWander, [&]()->bool {
-        return !this->CanSeeTarget();
-        })
-    );
+    BuildBehaviourTree();
 }
 
-GooseNPC::~GooseNPC() {}
+GooseNPC::~GooseNPC() {
+    delete rootNode;
+}
 
 void GooseNPC::Update(float dt) {
-    StateGameObject::Update(dt); // 执行状态机
+    if (rootNode) {
+        rootNode->Execute(dt);
+    }
+    // 调用父类 Update 以处理物理等通用逻辑
+    // StateGameObject::Update(dt); // 如果不需要父类里的 StateMachine 更新，可以直接调用 GameObject::Update
+    GameObject::Update(dt);
 }
 
-void GooseNPC::Wander(float dt) {
-    // 简单的游荡逻辑：如果没有路径，随机找一个点 (这里简化为发呆或随机移动)
-    // 为了演示，我们让它就在原地转圈或者简单移动
-    GetPhysicsObject()->SetAngularVelocity(Vector3(0, 1, 0));
+void GooseNPC::BuildBehaviourTree() {
+	// behaviour: chase player
+
+    BehaviourSequence* chaseSequence = new BehaviourSequence("Chase Sequence");
+
+    chaseSequence->AddChild(new BehaviourAction("Chase Player", [&](float dt, BehaviourState s) -> BehaviourState {
+        return this->ChasePlayer(dt);
+        })
+    );
+
+    rootNode = chaseSequence;
 }
 
-void GooseNPC::ChasePlayer(float dt) {
-    if (!playerTarget || !grid) return;
+BehaviourState GooseNPC::ChasePlayer(float dt) {
+    if (!playerTarget || !grid) return Failure;
 
-    // 定期重新计算路径 (每 0.5 秒或是当目标移动太远)
+    Vector3 targetPos = playerTarget->GetTransform().GetPosition();
+    Vector3 myPos = GetTransform().GetPosition();
+
+    // 1. 路径计算 (每 0.5 秒更新一次，节省性能)
     timeSinceLastPathCalc += dt;
     if (timeSinceLastPathCalc > 0.5f) {
-        CalculatePathTo(playerTarget->GetTransform().GetPosition());
+        CalculatePathTo(targetPos);
         timeSinceLastPathCalc = 0.0f;
     }
 
-    FollowPath(dt);
+    // 2. 移动逻辑
+    if (pathPoints.empty()) {
+        // 如果没有路径点（就在旁边，或者寻路失败），直接向玩家移动
+        Vector3 dir = (targetPos - myPos);
+        dir.y = 0;
+        if (Vector::Length(dir) > 1.0f) {
+            GetPhysicsObject()->AddForce(Vector::Normalise(dir) * chaseSpeed);
+            LookAt(targetPos, dt);
+        }
+        else {
+            GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0)); // 抓到了，停下
+        }
+        return Ongoing;
+    }
+
+    // 获取当前路径点
+    Vector3 nextWaypoint = pathPoints[0];
+    Vector3 dir = nextWaypoint - myPos;
+    dir.y = 0;
+    float distToNode = Vector::Length(dir);
+
+    // 如果到达当前路径点，移除并前往下一个
+    if (distToNode < 3.0f) {
+        pathPoints.erase(pathPoints.begin());
+        return Ongoing;
+    }
+
+    // 3. 物理移动
+    // 使用 AddForce 比 SetLinearVelocity 更自然，不容易穿墙
+    GetPhysicsObject()->AddForce(Vector::Normalise(dir) * chaseSpeed);
+
+    // 4. 平滑转向 (关键：防止鬼畜)
+    LookAt(nextWaypoint, dt);
+
+    // 简单的 Debug 线条
+    Debug::DrawLine(myPos, nextWaypoint, Vector4(1, 0, 0, 1));
+
+    return Ongoing; // 只要玩家活着，就一直追
 }
 
 void GooseNPC::CalculatePathTo(Vector3 targetPos) {
@@ -80,7 +104,6 @@ void GooseNPC::CalculatePathTo(Vector3 targetPos) {
 
     // 使用 A* 寻路
     if (grid->FindPath(startPos, targetPos, currentPath)) {
-        // 将 NavigationPath 转换为 vector 以便处理
         Vector3 pos;
         while (currentPath.PopWaypoint(pos)) {
             pathPoints.push_back(pos);
@@ -88,36 +111,24 @@ void GooseNPC::CalculatePathTo(Vector3 targetPos) {
     }
 }
 
-void GooseNPC::FollowPath(float dt) {
-    if (pathPoints.empty()) return;
-
-    // 目标是路径中的下一个点 (因为 PopWaypoint 是反向的，最后一个点其实是起点附近的点)
-    // 但是 FindPath 的实现通常是从 End 到 Start 存入栈，所以 Pop 出来的是 Start -> End
-    // 我们取第一个点作为目标
-    Vector3 target = pathPoints[0];
-
-    // 移动逻辑
-    Vector3 dir = target - GetTransform().GetPosition();
+void GooseNPC::LookAt(Vector3 targetPos, float dt) {
+    Vector3 dir = (targetPos - GetTransform().GetPosition());
     dir.y = 0;
-    float dist = Vector::Length(dir);
+    dir = Vector::Normalise(dir);
 
-    if (dist < 2.0f) {
-        // 到达当前点，移除它，前往下一个
-        pathPoints.erase(pathPoints.begin());
-        return;
-    }
+    if (Vector::LengthSquared(dir) < 0.01f) return;
 
-    // 移动物理
-    if (dist > 0) {
-        Vector3 velocity = Vector::Normalise(dir) * chaseSpeed;
-        GetPhysicsObject()->SetLinearVelocity(velocity);
+    // 计算目标旋转
+    Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), -dir, Vector3(0, 1, 0));
+    Quaternion targetOrientation = Quaternion(Matrix::Inverse(lookAtMat));
 
-        // 面向移动方向
-        // ... (可以使用之前的 LookAt 逻辑)
-    }
+    // 获取当前旋转
+    Quaternion currentOrientation = GetTransform().GetOrientation();
 
-    // Debug: 画出路径
-    for (size_t i = 0; i < pathPoints.size() - 1; ++i) {
-        Debug::DrawLine(pathPoints[i], pathPoints[i + 1], Vector4(0, 1, 0, 1));
-    }
+    // Slerp 平滑插值 (速度 5.0f 比较像鹅的转身速度)
+    Quaternion newOrientation = Quaternion::Slerp(currentOrientation, targetOrientation, 5.0f * dt);
+
+    GetTransform().SetOrientation(newOrientation);
+    // 锁定角速度，防止物理碰撞导致翻滚
+    GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
 }

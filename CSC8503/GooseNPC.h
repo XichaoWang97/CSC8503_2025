@@ -1,6 +1,10 @@
 #pragma once
-#include "StateGameObject.h"
+#include "StateGameObject.h" // 保持继承 StateGameObject 以兼容 MyGame 中的指针，但我们不使用它的状态机
 #include "NavigationGrid.h"
+#include "BehaviourNode.h"
+#include "BehaviourSelector.h"
+#include "BehaviourSequence.h"
+#include "BehaviourAction.h"
 
 namespace NCL::CSC8503 {
     class GooseNPC : public StateGameObject {
@@ -11,19 +15,25 @@ namespace NCL::CSC8503 {
         void Update(float dt) override;
 
     protected:
-        // AI behaviour
-        void ChasePlayer(float dt);
-        void Wander(float dt);
+        // --- 行为树相关 ---
+        void BuildBehaviourTree();
 
-        // path
+        // 核心行为逻辑
+        BehaviourState ChasePlayer(float dt);
+
+        // 辅助函数
         void CalculatePathTo(Vector3 targetPos);
-        void FollowPath(float dt);
+        void LookAt(Vector3 targetPos, float dt); // 加入 dt 以实现平滑转向
 
         NavigationGrid* grid;
+        GameObject* playerTarget;
+
+        BehaviourNode* rootNode;
+
         NavigationPath  currentPath;
         std::vector<Vector3> pathPoints;
 
         float timeSinceLastPathCalc = 0.0f;
+        float chaseSpeed;
     };
 }
-

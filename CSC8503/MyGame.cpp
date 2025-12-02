@@ -168,7 +168,7 @@ void MyGame::UpdateGame(float dt) {
 			return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
 				pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
 				pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
-			};
+		};
 
 		// 只要玩家或者包裹在上面，就算触发
 		if (CheckTrigger(playerObject) || CheckTrigger(cubeStone)) {
@@ -424,39 +424,6 @@ GameObject* MyGame::AddCoinToWorld(const Vector3& position, Vector3 dimensions, 
 	return coin;
 }
 
-/*RivalAI* MyGame::AddRivalAIToWorld(const Vector3& position) {
-	float meshSize = 1.0f;
-	float inverseMass = 0.5f;
-
-	RivalAI* rival = new RivalAI(navGrid);
-	SphereVolume* volume = new SphereVolume(0.5f);
-
-	rival->SetBoundingVolume(volume);
-
-	rival->GetTransform()
-		.SetScale(Vector3(meshSize, meshSize, meshSize))
-		.SetPosition(position);
-
-	rival->SetRenderObject(new RenderObject(rival->GetTransform(), catMesh, notexMaterial));
-	rival->GetRenderObject()->SetColour(Vector4(0.5f, 0, 0.5f, 1)); // 给玩家设置特殊颜色 (例如青色 Cyan)
-
-	PhysicsObject* physicsObj = new PhysicsObject(rival->GetTransform(), rival->GetBoundingVolume());
-	physicsObj->SetInverseMass(inverseMass);
-	physicsObj->InitSphereInertia();
-
-	// [关键] 注入 GameWorld，否则它找不到包裹也不能生成石头
-	rival->SetGameWorld(&world);
-	// --- 改动 3: 取消弹跳 ---
-	physicsObj->SetElasticity(0.0f); // 设为 0，落地不反弹
-	// physicsObj->SetFriction(0.8f); // 可以增加摩擦力，但这通常用于物体之间的接触计算，这里主要靠我们手写的刹车逻辑
-
-	rival->SetPhysicsObject(physicsObj);
-
-	world.AddGameObject(rival);
-
-	return rival;
-}*/
-
 StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	float meshSize = 3.0f;
 	float inverseMass = 0.5f;
@@ -551,6 +518,16 @@ void MyGame::InitCourierLevel() {
 	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 0, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
 	world.AddGameObject(packageObject);
 
+	// Add navGrid and AI
+	if (!navGrid) {
+		navGrid = new NavigationGrid("TestGrid1.txt");
+	}
+	rivalAIObject = new RivalAI(&world, navGrid, Vector3(-60, 0, 50), catMesh, notexMaterial, Vector4(1, 0, 0, 1)); // red color
+	rivalAIObject->SetPlayer(playerObject); // 多人游戏可以设置扫描一遍所有玩家
+	world.AddGameObject(rivalAIObject);
+	// Add Goose NPC
+	gooseNPC = AddGooseNPCToWorld(Vector3(-20, 0, -20));
+
 	AddSphereToWorld(Vector3(-55, 0, 60), 2.0f, 1.0f); // test sphere above package
 	cubeStone = AddCubeToWorld(Vector3(-45, 0, 60), Vector3(1, 1, 1), 1.0f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
@@ -607,13 +584,4 @@ void MyGame::InitCourierLevel() {
 	enemy->SetTarget(playerObject);
 	enemy->SetGameWorld(&world);
 	enemy->SetResetPoint(playerStartPos);
-
-	// Init Navigation Grid
-	if (!navGrid) {
-		navGrid = new NavigationGrid("TestGrid1.txt");
-	}
-	// Add Goose NPC and rival AI
-	gooseNPC = AddGooseNPCToWorld(Vector3(-20, 0, -20));
-	//world.AddGameObject(gooseNPC);  // BUG
-	//rivalAI = AddRivalAIToWorld(Vector3(20, 0, 20));
 }
