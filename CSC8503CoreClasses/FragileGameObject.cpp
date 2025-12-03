@@ -84,14 +84,6 @@ void FragileGameObject::OnCollisionBegin(GameObject* otherObject) {
             health = 0;
             isBroken = true;
             timer = 5.0f;
-
-            // if destroyed, move it underground
-            GetTransform().SetPosition(Vector3(0, -9999, 0));
-			// close physics
-            GetPhysicsObject()->ClearForces();
-            GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
-            GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
-            GetPhysicsObject()->SetInverseMass(0.0f);
         }
         else {
 			// get colour based on health

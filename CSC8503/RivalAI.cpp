@@ -50,13 +50,13 @@ RivalAI::~RivalAI() {
 }
 
 void RivalAI::Update(float dt) {
-    // Jump cooldown update
-    if (jumpCooldown > 0.0f) {
+	actionCooldown -= dt; // General action cooldown
+    
+    if (jumpCooldown > 0.0f) { // Jump cooldown update
         jumpCooldown -= dt;
-        actionCooldown -= dt;
     }
-	// Execute behaviour tree
-    if (rootNode) {
+	
+    if (rootNode) { // Execute behaviour tree
         rootNode->Execute(dt);
     }
     GameCharacter::Update(dt);
@@ -300,6 +300,25 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
         // 物理移动
         GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 20.0f);
         LookAt(nextWaypoint);
+
+        // Draw Debug Lines
+        // 1. 画出鹅到当前路标的线（短线，红色）
+        Debug::DrawLine(GetTransform().GetPosition(), nextWaypoint, Vector4(1, 0, 0, 1));
+        // 2. 画出完整的路径规划（蓝色折线）
+        // 这样你能看到从 (-60, 40) 怎么一步步连到 (-7, 80)
+        for (size_t i = 0; i < pathPoints.size() - 1; ++i) {
+            Vector3 a = pathPoints[i];
+            Vector3 b = pathPoints[i + 1];
+
+            // 稍微抬高一点，防止被地板遮挡
+            a.y += 0.2;
+            b.y += 0.2f;
+
+            Debug::DrawLine(a, b, Vector4(0, 0, 1, 1));
+        }
+        // 3. 画出终点位置（绿色柱子）
+        Debug::DrawLine(targetPos, targetPos + Vector3(0, 10, 0), Vector4(0, 1, 0, 1));
+
     }
     else {
         // 寻路失败（可能在直线上），直接走
@@ -391,25 +410,26 @@ BehaviourState RivalAI::AttemptGrab(float dt) {
 }
 
 BehaviourState RivalAI::ThrowAtPlayer(float dt) {
+	// Actually, this action aims to the package that player is holding
     if (!player) return Failure;
-
-    Vector3 playerPos = player->GetTransform().GetPosition();
+	std::cout << "RivalAI: ThrowAtPlayer action executing.\n";
+	Vector3 packagePos = fragilePackage->GetTransform().GetPosition(); // get package position
     Vector3 myPos = GetTransform().GetPosition();
-    float dist = Vector::Length(playerPos - myPos);
+    float dist = Vector::Length(packagePos - myPos);
 
-    // 1. 接近
-    if (dist > 30.0f) {
-        Vector3 dir = (playerPos - myPos);
+	// check distance
+    if (dist > 50.0f) {
+        Vector3 dir = (packagePos - myPos);
         dir.y = 0;
         GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 20.0f);
-        LookAt(playerPos);
+        LookAt(packagePos);
         return Ongoing;
     }
-
-    // 2. 攻击
-    LookAt(playerPos);
+    std::cout << actionCooldown << std::endl;
+	// Attack when in range
+    LookAt(packagePos);
     if (actionCooldown <= 0.0f) {
-        Vector3 aimDir = Vector::Normalise((playerPos - myPos));
+        Vector3 aimDir = Vector::Normalise((packagePos - myPos));
 		ThrowHeldItem(aimDir); // parent method
         actionCooldown = 1.0f;
         return Success;

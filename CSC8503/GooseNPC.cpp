@@ -83,7 +83,6 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
     LookAt(nextWaypoint, dt);
     
 	// Draw Debug Lines
-    //Debug::DrawLine(myPos, nextWaypoint, Vector4(1, 0, 0, 1));
     // 1. 画出鹅到当前路标的线（短线，红色）
     Debug::DrawLine(myPos, nextWaypoint, Vector4(1, 0, 0, 1));
 

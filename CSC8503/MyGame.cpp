@@ -147,8 +147,22 @@ void MyGame::UpdateGame(float dt) {
 		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
 		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
 
+		// if package is broken
 		if (packageObject->IsBroken()) {
 			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
+			// drop package if held
+			if (playerObject->GetHeldItem() != nullptr) {
+				if (playerObject->GetHeldItem()->GetName() == "FragilePackage") {
+					playerObject->ThrowHeldItem(Vector3(0, 0, 0));
+				}
+			}
+			if (rivalAI->GetHeldItem() != nullptr) {
+				if (rivalAI->GetHeldItem()->GetName() == "FragilePackage") {
+					rivalAI->ThrowHeldItem(Vector3(0, 0, 0));
+				}
+			}
+			packageObject->GetTransform().SetPosition(Vector3(0, -9999, 0)); // if destroyed, move it underground
+			// reset function is in FragileGameObject.cpp
 		}
 	}
 
@@ -519,7 +533,7 @@ void MyGame::InitCourierLevel() {
 	if (!navGrid) {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
-	rivalAI = new RivalAI(&world, navGrid, Vector3(-60, 0, 50), catMesh, notexMaterial, Vector4(1, 0, 0, 1)); // red color
+	rivalAI = new RivalAI(&world, navGrid, Vector3(-60, 5, 50), catMesh, notexMaterial, Vector4(1, 0, 0, 1)); // red color
 	rivalAI->SetPlayer(playerObject); // 多人游戏可以设置扫描一遍所有玩家
 	world.AddGameObject(rivalAI);
 
@@ -527,58 +541,58 @@ void MyGame::InitCourierLevel() {
 	gooseNPC = AddGooseNPCToWorld(Vector3(-60, 5, 30));
 
 	// Add packageObject
-	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 0, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
+	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 5, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
 	world.AddGameObject(packageObject);
 	playerObject->SetFragilePackage(packageObject);
 	rivalAI->SetFragilePackage(packageObject);
 
 	// Add Sphere and CubeStone
-	AddSphereToWorld(Vector3(-55, 0, 60), 2.0f, 1.0f); // test sphere above package
-	cubeStone = AddCubeToWorld(Vector3(-45, 0, 60), Vector3(1, 1, 1), 1.0f, "CubeStone"); // test cubeStone, interact with pressurePlate
+	AddSphereToWorld(Vector3(-55, 3, 60), 2.0f, 1.0f); // test sphere above package
+	cubeStone = AddCubeToWorld(Vector3(-45, 3, 60), Vector3(1, 1, 1), 1.0f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
 	// Add coins at various locations, mass = 0 for floating
-	AddCoinToWorld(Vector3(-50, -15, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
-	AddCoinToWorld(Vector3(-50, -15, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
-	AddCoinToWorld(Vector3(10, -15, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(-50, 5, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(-50, 5, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(10, 5, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
 
 	// Build terrain and obstacles
-	AddFloorToWorld(Vector3(0, -20, 0)); // floor
+	AddFloorToWorld(Vector3(0, 0, 0)); // floor
 
 	// walls
 	float wallHeight = 20.0f;
 	float boundarySize = 100.0f;
 	float wallThickness = 2.0f;
-	AddCubeToWorld(Vector3(0, -20 + wallHeight, -boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
-	AddCubeToWorld(Vector3(0, -20 + wallHeight, boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
-	AddCubeToWorld(Vector3(-boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
-	AddCubeToWorld(Vector3(boundarySize, -20 + wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
+	AddCubeToWorld(Vector3(0, wallHeight, -boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
+	AddCubeToWorld(Vector3(0, wallHeight, boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
+	AddCubeToWorld(Vector3(-boundarySize, wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
+	AddCubeToWorld(Vector3(boundarySize, wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
 
 	// obstacles
-	AddCubeToWorld(Vector3(-30, -10, 0), Vector3(2, 10, 40), 0.0f);
-	AddCubeToWorld(Vector3(40, -15, 20), Vector3(10, 5, 10), 0.0f);
+	AddCubeToWorld(Vector3(-30, 10, 0), Vector3(2, 10, 40), 0.0f);
+	AddCubeToWorld(Vector3(40, 5, 20), Vector3(10, 5, 10), 0.0f);
 
 	// Destination zone, green area, now it is static
-	Vector3 targetPos = Vector3(60, -18, -60);
+	Vector3 targetPos = Vector3(60, 2, -60);
 	targetZone = AddCubeToWorld(targetPos, Vector3(10, 1, 10), 0.0f);
 	if (targetZone && targetZone->GetRenderObject()) {
 		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // set green with some transparency
 	}
 
 	// Pressure plate
-	pressurePlate = AddCubeToWorld(Vector3(0, -18, 40), Vector3(5, 0.5f, 5), 0.0f);
+	pressurePlate = AddCubeToWorld(Vector3(0, 2, 40), Vector3(5, 0.5f, 5), 0.0f);
 	if (pressurePlate && pressurePlate->GetRenderObject()) {
 		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // yellow
 	}
 	// Door controlled by pressure plate
-	puzzleDoor = AddCubeToWorld(Vector3(60, -10, -30), Vector3(15, 10, 2), 0.0f);
+	puzzleDoor = AddCubeToWorld(Vector3(60, 10, -30), Vector3(15, 10, 2), 0.0f);
 	if (puzzleDoor && puzzleDoor->GetRenderObject()) {
 		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // blue
 	}
 
 	// Simple Enemy AI Setup
-	Vector3 enemyStartPos = Vector3(0, 0, 0);
+	Vector3 enemyStartPos = Vector3(0, 5, 0);
 	std::vector<Vector3> aiPath;
-	float pathY = -16.0f;
+	float pathY = 4.0f;
 	aiPath.push_back(Vector3(20, pathY, 20));
 	aiPath.push_back(Vector3(20, pathY, -20));
 	aiPath.push_back(Vector3(-20, pathY, -20));
