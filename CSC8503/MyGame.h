@@ -63,9 +63,10 @@ namespace NCL {
 			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
 			GameObject* coinBonus = nullptr;  // bonus coin
 			Player* playerObject = nullptr;
-			RivalAI* rivalAIObject = nullptr;
+			GooseNPC* gooseNPC = nullptr;
+			RivalAI* rivalAI = nullptr;
 			FragileGameObject* packageObject = nullptr;
-
+			
 			// About coin and score
 			int score = 0;
 			const int winningScore = 3; // score needed to win
@@ -73,7 +74,9 @@ namespace NCL {
 			// win or lose
 			bool isGameOver = false;
 			bool isGameWon = false;
-
+			// 用于存储导航网格
+			NavigationGrid* navGrid = nullptr;
+			
 
 			GameWorld& world;
 			GameTechRendererInterface& renderer;
@@ -86,9 +89,7 @@ namespace NCL {
 			float		forceMagnitude;
 
 			GameObject* selectionObject = nullptr;
-
 			
-
 			// Meshes Textures and Materials
 			Rendering::Mesh* catMesh = nullptr;
 			Rendering::Mesh* kittenMesh = nullptr;
@@ -110,10 +111,7 @@ namespace NCL {
 
 			void BridgeConstraintTest();
 
-			// 用于存储导航网格
-			NavigationGrid* navGrid = nullptr;
-			GooseNPC* gooseNPC = nullptr;
-			RivalAI* rivalAI = nullptr;
+			
 
 			// --- 抓取系统核心结构 ---
 			struct GrappleInfo {

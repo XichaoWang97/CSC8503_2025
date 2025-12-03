@@ -15,10 +15,9 @@ namespace NCL::CSC8503 {
         void Update(float dt) override;
 
     protected:
-        // --- 行为树相关 ---
+		// Behaviour Tree
         void BuildBehaviourTree();
 
-        // 核心行为逻辑
         BehaviourState ChasePlayer(float dt);
 
         // 辅助函数

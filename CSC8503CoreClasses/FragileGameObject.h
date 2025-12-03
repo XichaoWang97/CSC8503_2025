@@ -20,10 +20,14 @@ namespace NCL {
             void Reset();
             virtual void Update(float dt) override;
 
+			void SetAttached(bool attached) { isAttached = attached; }
+            bool GetAttached() const { return isAttached; }
+
         protected:
             float health;
             float maxHealth;
             bool isBroken;
+			bool isAttached;
             float timer = 0.0f;
 			Vector3 initialPosition;
         };

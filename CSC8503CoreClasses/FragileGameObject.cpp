@@ -17,6 +17,7 @@ FragileGameObject::FragileGameObject(const std::string& name, const Vector3& pos
     maxHealth = 100.0f;
     health = maxHealth;
     isBroken = false;
+	isAttached = false;
 
 	// set physics volume
     SphereVolume* volume = new SphereVolume(1.0f);

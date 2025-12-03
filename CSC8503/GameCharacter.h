@@ -2,6 +2,7 @@
 #include "GameObject.h"
 #include "GameWorld.h"
 #include "PositionConstraint.h"
+#include "FragileGameObject.h"
 #include "PhysicsSystem.h"
 #include "PhysicsObject.h"
 #include "Ray.h"
@@ -15,11 +16,17 @@ namespace NCL::CSC8503 {
             gameWorld = world;
             heldItem = nullptr;
             grabConstraint = nullptr;
+            fragilePackage = nullptr;
         }
 
         ~GameCharacter() {
             DropHeldItem();
         }
+
+		// set fragile package
+        void SetFragilePackage(FragileGameObject* package) {
+            fragilePackage = package;
+		}
 
         // Grab
         void TryGrab(Vector3 aimDir) {
@@ -34,8 +41,15 @@ namespace NCL::CSC8503 {
                 float dist = collision.rayDistance;
 
                 if (dist < 30.0f) {
-                    if (target->GetName() == "Stone" || target->GetName() == "FragilePackage" || target->GetName()=="CubeStone") {
+                    if (target->GetName() == "Stone" || target->GetName()=="CubeStone") {
                         AttachItem(target);
+                    }
+                    if (target->GetName() == "FragilePackage") {
+						// if package is not attached, it can be grabbed
+                        if (fragilePackage->GetAttached() == false) {
+                            AttachItem(target);
+							fragilePackage->SetAttached(true);
+                        }
                     }
                 }
             }
@@ -53,12 +67,15 @@ namespace NCL::CSC8503 {
 				throwForce = 150.0f; // slightly throw fragile package
             }
             item->GetPhysicsObject()->ApplyLinearImpulse(aimDir * throwForce);
+            if (item->GetName() == "FragilePackage") {
+				fragilePackage->SetAttached(false);
+            }
         }
 
-        // check hold item
+        // Check hold item
         GameObject* GetHeldItem() const { return heldItem; }
 
-		// draw grapple line
+		// Draw grapple line
         void DrawGrappleLine() {
             if (heldItem) {
                 Vector3 startPos = GetTransform().GetPosition() + Vector3(0, 1.5f, 0);
@@ -70,7 +87,7 @@ namespace NCL::CSC8503 {
         }
 
     protected:
-        // create constraint
+        // Create constraint
         void AttachItem(GameObject* item) {
             heldItem = item;
             // constraint£ºkeep 5.0f distance
@@ -83,7 +100,7 @@ namespace NCL::CSC8503 {
             }
         }
 
-		// delete constraint
+		// Delete constraint
         void DropHeldItem() {
             if (grabConstraint) {
                 gameWorld->RemoveConstraint(grabConstraint, true);
@@ -95,6 +112,7 @@ namespace NCL::CSC8503 {
         GameWorld* gameWorld;
         GameObject* heldItem;
         PositionConstraint* grabConstraint;
+		FragileGameObject* fragilePackage;
 		float actionCooldown = 0.0f; // cooldown time between actions
     };
 }

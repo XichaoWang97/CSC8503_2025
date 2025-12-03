@@ -53,12 +53,14 @@ void RivalAI::Update(float dt) {
     // Jump cooldown update
     if (jumpCooldown > 0.0f) {
         jumpCooldown -= dt;
+        actionCooldown -= dt;
     }
 	// Execute behaviour tree
     if (rootNode) {
         rootNode->Execute(dt);
     }
     GameCharacter::Update(dt);
+    DrawGrappleLine();
 }
 
 void RivalAI::BuildBehaviourTree() {
@@ -396,7 +398,7 @@ BehaviourState RivalAI::ThrowAtPlayer(float dt) {
     float dist = Vector::Length(playerPos - myPos);
 
     // 1. ½Ó½ü
-    if (dist > 15.0f) {
+    if (dist > 30.0f) {
         Vector3 dir = (playerPos - myPos);
         dir.y = 0;
         GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 20.0f);

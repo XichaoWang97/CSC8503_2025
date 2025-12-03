@@ -9,9 +9,9 @@ using namespace CSC8503;
 GooseNPC::GooseNPC(NavigationGrid* _grid, GameObject* _player) : StateGameObject("Goose") {
     grid = _grid;
     playerTarget = _player;
-    chaseSpeed = 5.0f; // 追逐速度
+	chaseSpeed = 5.0f; // chase speed of the goose
     rootNode = nullptr;
-
+    timeSinceLastPathCalc = 0.0f;
     BuildBehaviourTree();
 }
 
@@ -30,13 +30,9 @@ void GooseNPC::Update(float dt) {
 
 void GooseNPC::BuildBehaviourTree() {
 	// behaviour: chase player
-
     BehaviourSequence* chaseSequence = new BehaviourSequence("Chase Sequence");
 
-    chaseSequence->AddChild(new BehaviourAction("Chase Player", [&](float dt, BehaviourState s) -> BehaviourState {
-        return this->ChasePlayer(dt);
-        })
-    );
+    chaseSequence->AddChild(new BehaviourAction("Chase Player", [&](float dt, BehaviourState s){ return ChasePlayer(dt); }));
 
     rootNode = chaseSequence;
 }
@@ -49,7 +45,7 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
 
     // 1. 路径计算 (每 0.5 秒更新一次，节省性能)
     timeSinceLastPathCalc += dt;
-    if (timeSinceLastPathCalc > 0.5f) {
+    if (timeSinceLastPathCalc > 1.0f) {
         CalculatePathTo(targetPos);
         timeSinceLastPathCalc = 0.0f;
     }
@@ -71,32 +67,46 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
 
     // 获取当前路径点
     Vector3 nextWaypoint = pathPoints[0];
+    nextWaypoint.y = myPos.y;
     Vector3 dir = nextWaypoint - myPos;
     dir.y = 0;
     float distToNode = Vector::Length(dir);
 
     // 如果到达当前路径点，移除并前往下一个
-    if (distToNode < 3.0f) {
+    if (distToNode < 2.0f) {
         pathPoints.erase(pathPoints.begin());
         return Ongoing;
     }
 
     // 3. 物理移动
-    // 使用 AddForce 比 SetLinearVelocity 更自然，不容易穿墙
-    GetPhysicsObject()->AddForce(Vector::Normalise(dir) * chaseSpeed);
-
-    // 4. 平滑转向 (关键：防止鬼畜)
+    GetPhysicsObject()->AddForce(Vector::Normalise(-dir) * chaseSpeed);
     LookAt(nextWaypoint, dt);
-
-    // 简单的 Debug 线条
+    
+	// Draw Debug Lines
+    //Debug::DrawLine(myPos, nextWaypoint, Vector4(1, 0, 0, 1));
+    // 1. 画出鹅到当前路标的线（短线，红色）
     Debug::DrawLine(myPos, nextWaypoint, Vector4(1, 0, 0, 1));
 
-    return Ongoing; // 只要玩家活着，就一直追
+    // 2. 画出完整的路径规划（蓝色折线）
+    // 这样你能看到从 (-60, 40) 怎么一步步连到 (-7, 80)
+    for (size_t i = 0; i < pathPoints.size() - 1; ++i) {
+        Vector3 a = pathPoints[i];
+        Vector3 b = pathPoints[i + 1];
+
+        // 稍微抬高一点，防止被地板遮挡
+        a.y += 0.2;
+        b.y += 0.2f;
+
+        Debug::DrawLine(a, b, Vector4(0, 0, 1, 1));
+    }
+    // 3. 画出终点位置（绿色柱子）
+    Debug::DrawLine(targetPos, targetPos + Vector3(0, 10, 0), Vector4(0, 1, 0, 1));
+
+    return Ongoing;
 }
 
 void GooseNPC::CalculatePathTo(Vector3 targetPos) {
     if (!grid) return;
-
     currentPath.Clear();
     pathPoints.clear();
 
@@ -117,9 +127,9 @@ void GooseNPC::LookAt(Vector3 targetPos, float dt) {
     dir = Vector::Normalise(dir);
 
     if (Vector::LengthSquared(dir) < 0.01f) return;
-
+    
     // 计算目标旋转
-    Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), -dir, Vector3(0, 1, 0));
+    Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), dir, Vector3(0, 1, 0));
     Quaternion targetOrientation = Quaternion(Matrix::Inverse(lookAtMat));
 
     // 获取当前旋转

@@ -458,7 +458,7 @@ GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position)
 	float inverseMass = 0.5f;
 
 	GooseNPC* goose = new GooseNPC(navGrid, playerObject); // init goose with navgrid and player reference
-	AABBVolume* volume = new AABBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
+	AABBVolume* volume = new AABBVolume(Vector3(1.0f, 1.0f, 1.0f) * meshSize);
 	goose->SetBoundingVolume(volume);
 
 	goose->GetTransform()
@@ -466,7 +466,7 @@ GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position)
 		.SetPosition(position);
 
 	goose->SetRenderObject(new RenderObject(goose->GetTransform(), gooseMesh, notexMaterial));
-	goose->GetRenderObject()->SetColour(Vector4(1, 0.5f, 0, 1)); // orange color goose
+	goose->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red color goose
 
 	PhysicsObject* physicsObj = new PhysicsObject(goose->GetTransform(), goose->GetBoundingVolume());
 
@@ -513,21 +513,26 @@ void MyGame::InitCourierLevel() {
 	Vector3 playerStartPos = Vector3(-60, 5, 60);
 	playerObject = new Player(&world, playerStartPos, catMesh, notexMaterial, Vector4(0, 1, 1, 1)); //cyan color
 	world.AddGameObject(playerObject);
-
-	// Add packageObject
-	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 0, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
-	world.AddGameObject(packageObject);
-
+	
+	
 	// Add navGrid and AI
 	if (!navGrid) {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
-	rivalAIObject = new RivalAI(&world, navGrid, Vector3(-60, 0, 50), catMesh, notexMaterial, Vector4(1, 0, 0, 1)); // red color
-	rivalAIObject->SetPlayer(playerObject); // 多人游戏可以设置扫描一遍所有玩家
-	world.AddGameObject(rivalAIObject);
-	// Add Goose NPC
-	gooseNPC = AddGooseNPCToWorld(Vector3(-20, 0, -20));
+	rivalAI = new RivalAI(&world, navGrid, Vector3(-60, 0, 50), catMesh, notexMaterial, Vector4(1, 0, 0, 1)); // red color
+	rivalAI->SetPlayer(playerObject); // 多人游戏可以设置扫描一遍所有玩家
+	world.AddGameObject(rivalAI);
 
+	// Add Goose NPC
+	gooseNPC = AddGooseNPCToWorld(Vector3(-60, 5, 30));
+
+	// Add packageObject
+	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 0, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
+	world.AddGameObject(packageObject);
+	playerObject->SetFragilePackage(packageObject);
+	rivalAI->SetFragilePackage(packageObject);
+
+	// Add Sphere and CubeStone
 	AddSphereToWorld(Vector3(-55, 0, 60), 2.0f, 1.0f); // test sphere above package
 	cubeStone = AddCubeToWorld(Vector3(-45, 0, 60), Vector3(1, 1, 1), 1.0f, "CubeStone"); // test cubeStone, interact with pressurePlate
 

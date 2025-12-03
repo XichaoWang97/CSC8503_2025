@@ -59,36 +59,3 @@ void GameObject::UpdateBroadphaseAABB()
 		}
 	}
 }
-
-//  New: Set renderer and physics functions
-void GameObject::SetRenderProperties(Rendering::Mesh* mesh, float meshSize, const GameTechMaterial& material, const Vector4& colour) {
-	// set render object
-	SetRenderObject(new RenderObject(GetTransform(), mesh, material));
-	GetRenderObject()->SetColour(colour);
-}
-
-void GameObject::SetSpherePhysicsProperties(Vector3 position, float radius, float inverseMass) {
-	// set physics volume
-	SphereVolume* volume = new SphereVolume(radius);
-	SetBoundingVolume(volume);
-	// set position
-	GetTransform().SetScale(Vector3(radius, radius, radius)).SetPosition(position);
-	// set physics object
-	PhysicsObject* physicsObj = new PhysicsObject(GetTransform(), GetBoundingVolume());
-	physicsObj->SetInverseMass(inverseMass);
-	physicsObj->InitSphereInertia();
-	SetPhysicsObject(physicsObj);
-}
-
-void GameObject::SetAABBphysicsProperties(Vector3 position, float inverseMass, Vector3 dimensions) {
-	// set physics volume
-	AABBVolume* volume = new AABBVolume(dimensions);
-	SetBoundingVolume(volume);
-	// set position
-	GetTransform().SetScale(dimensions * 2.0f).SetPosition(position);
-	// set physics object
-	PhysicsObject* physicsObj = new PhysicsObject(GetTransform(), GetBoundingVolume());
-	physicsObj->SetInverseMass(inverseMass);
-	physicsObj->InitCubeInertia();
-	SetPhysicsObject(physicsObj);
-}
