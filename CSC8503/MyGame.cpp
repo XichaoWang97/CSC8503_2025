@@ -99,8 +99,8 @@ void MyGame::UpdateGame(float dt) {
 	}
 
 	// 第三人称跟随镜头
-	if (playerObject) {
-		Vector3 playerPos = playerObject->GetTransform().GetPosition();
+	if (player) {
+		Vector3 playerPos = player->GetTransform().GetPosition();
 		
 		// 获取当前相机的朝向（由鼠标控制的 Yaw 和 Pitch）
 		float yaw = world.GetMainCamera().GetYaw();
@@ -128,7 +128,7 @@ void MyGame::UpdateGame(float dt) {
 		Ray ray(rayOrigin, rayDir);
 		RayCollision collision;
 		// 如果射线在 maxDist 距离内碰到了东西（忽略玩家自己）
-		if (world.Raycast(ray, collision, true, playerObject)) {
+		if (world.Raycast(ray, collision, true, player)) {
 			if (collision.rayDistance < maxDist) {
 				// 将距离设置为碰撞距离减去一点缓冲(0.5)，防止相机穿插在墙里面
 				currentDist = collision.rayDistance - 0.5f;
@@ -151,14 +151,14 @@ void MyGame::UpdateGame(float dt) {
 		if (packageObject->IsBroken()) {
 			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
 			// drop package if held
-			if (playerObject->GetHeldItem() != nullptr) {
-				if (playerObject->GetHeldItem()->GetName() == "FragilePackage") {
-					playerObject->ThrowHeldItem(Vector3(0, 0, 0));
+			if (player->GetHeldItem() != nullptr) {
+				if (player->GetHeldItem()->GetName() == "FragilePackage") {
+					player->ThrowHeldItem(Vector3(0, 0, 0));
 				}
 			}
-			if (rivalAI->GetHeldItem() != nullptr) {
-				if (rivalAI->GetHeldItem()->GetName() == "FragilePackage") {
-					rivalAI->ThrowHeldItem(Vector3(0, 0, 0));
+			if (rival->GetHeldItem() != nullptr) {
+				if (rival->GetHeldItem()->GetName() == "FragilePackage") {
+					rival->ThrowHeldItem(Vector3(0, 0, 0));
 				}
 			}
 			packageObject->GetTransform().SetPosition(Vector3(0, -9999, 0)); // if destroyed, move it underground
@@ -185,7 +185,7 @@ void MyGame::UpdateGame(float dt) {
 		};
 
 		// 只要玩家或者包裹在上面，就算触发
-		if (CheckTrigger(playerObject) || CheckTrigger(cubeStone)) {
+		if (CheckTrigger(player) || CheckTrigger(cubeStone)) {
 			isTriggered = true;
 		}
 
@@ -221,8 +221,8 @@ void MyGame::UpdateGame(float dt) {
 		if (!c->IsActive()) continue;
 
 		// calculate distance to player
-		float dist = Vector::Length((playerObject->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
-		GameObject* playerHeld = playerObject->GetHeldItem();
+		float dist = Vector::Length((player->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+		GameObject* playerHeld = player->GetHeldItem();
 		// collection radius 2.5f, need FragilePackage to collect
 		if (playerHeld) {
 			if (dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
@@ -238,7 +238,7 @@ void MyGame::UpdateGame(float dt) {
 		Vector3 zonePos = targetZone->GetTransform().GetPosition();
 		Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
 
-		Vector3 pPos = playerObject->GetTransform().GetPosition();
+		Vector3 pPos = player->GetTransform().GetPosition();
 
 		bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
 			pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
@@ -253,13 +253,13 @@ void MyGame::UpdateGame(float dt) {
 		}
 	}
 	// Death Condition - hit by goose
-	if (!isGameOver && !isGameWon && playerObject && gooseNPC) {
-		Vector3 pPos = playerObject->GetTransform().GetPosition();
-		Vector3 gPos = gooseNPC->GetTransform().GetPosition();
+	if (!isGameOver && !isGameWon && player && goose) {
+		Vector3 pPos = player->GetTransform().GetPosition();
+		Vector3 gPos = goose->GetTransform().GetPosition();
 
 		// simple distance check, large than goose size
 		float dist = Vector::Length((pPos - gPos));
-		if (dist < 3.6f) {
+		if (dist < 4.1f) {
 			isGameOver = true;
 		}
 	}
@@ -272,8 +272,8 @@ void MyGame::UpdateGame(float dt) {
 	//----------------------------------------------------------------------------------
 	
 	// player object update
-	if (!inSelectionMode && playerObject) {
-		playerObject->Update(dt);
+	if (!inSelectionMode && player) {
+		player->Update(dt);
 	}
 	// package object update
 	if(packageObject) {
@@ -466,11 +466,67 @@ StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	return character;
 }
 
+Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radius)
+{
+	float inverseMass = 0.5f;
+
+	player = new Player(&world);
+	
+	SphereVolume* volume = new SphereVolume(radius); // set bounding volume
+	player->SetBoundingVolume(volume);
+	
+	player->GetTransform() // set transform
+		.SetScale(Vector3(radius, radius, radius))
+		.SetPosition(position);
+
+	player->SetRenderObject(new RenderObject(player->GetTransform(), catMesh, notexMaterial));
+	player->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1)); // cyan
+
+	PhysicsObject* physicsObj = new PhysicsObject(player->GetTransform(), player->GetBoundingVolume()); // set physics object
+	physicsObj->SetInverseMass(inverseMass);
+	physicsObj->InitSphereInertia();
+	physicsObj->SetElasticity(0.0f); // no bounciness
+
+	player->SetPhysicsObject(physicsObj);
+	
+	world.AddGameObject(player);
+
+	return player;
+}
+
+RivalAI* MyGame::AddRivalAIToWorld(const NCL::Maths::Vector3& position, float radius)
+{
+	float inverseMass = 0.5f;
+
+	rival = new RivalAI(&world, navGrid);
+
+	SphereVolume* volume = new SphereVolume(radius);
+	rival->SetBoundingVolume(volume);
+
+	rival->GetTransform()
+		.SetScale(Vector3(radius, radius, radius))
+		.SetPosition(position);
+
+	rival->SetRenderObject(new RenderObject(rival->GetTransform(), catMesh, notexMaterial));
+	rival->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red
+
+	PhysicsObject* physicsObj = new PhysicsObject(rival->GetTransform(), rival->GetBoundingVolume());
+	physicsObj->SetInverseMass(inverseMass);
+	physicsObj->InitSphereInertia();
+	physicsObj->SetElasticity(0.0f); // no bounciness
+
+	rival->SetPhysicsObject(physicsObj);
+
+	world.AddGameObject(rival);
+
+	return rival;
+}
+
 GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position, float radius)
 {
 	float inverseMass = 0.5f;
 
-	GooseNPC* goose = new GooseNPC(navGrid, playerObject); // init goose with navgrid and player reference
+	GooseNPC* goose = new GooseNPC(navGrid, player); // init goose with navgrid and player reference
 	SphereVolume* volume = new SphereVolume(radius);
 	goose->SetBoundingVolume(volume);
 
@@ -523,27 +579,20 @@ void MyGame::BridgeConstraintTest() {
 void MyGame::InitCourierLevel() {
 
 	// Add player
-	Vector3 playerStartPos = Vector3(-60, 5, 60);
-	playerObject = new Player(&world, playerStartPos, catMesh, notexMaterial, Vector4(0, 1, 1, 1)); //cyan color
-	world.AddGameObject(playerObject);
-	
+	player = AddPlayerToWorld(Vector3(-60, 5, 60), 1.0f);//cyan color
 	
 	// Add navGrid and AI
 	if (!navGrid) {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
-	rivalAI = new RivalAI(&world, navGrid, Vector3(-60, 5, 50), catMesh, notexMaterial, Vector4(1, 0, 0, 1)); // red color
-	rivalAI->SetPlayer(playerObject); // 多人游戏可以设置扫描一遍所有玩家
-	world.AddGameObject(rivalAI);
-
-	// Add Goose NPC
-	gooseNPC = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
+	rival = AddRivalAIToWorld(Vector3(-60, 5, 50), 1.0f); // red color
+	goose = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
 
 	// Add packageObject
 	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 5, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
 	world.AddGameObject(packageObject);
-	playerObject->SetFragilePackage(packageObject);
-	rivalAI->SetFragilePackage(packageObject);
+	player->SetFragilePackage(packageObject);
+	rival->SetFragilePackage(packageObject);
 
 	// Add Sphere and CubeStone
 	AddSphereToWorld(Vector3(-55, 3, 60), 2.0f, 1.0f); // test sphere above package
@@ -589,7 +638,6 @@ void MyGame::InitCourierLevel() {
 	}
 
 	// Simple Enemy AI Setup
-	Vector3 enemyStartPos = Vector3(0, 5, 0);
 	std::vector<Vector3> aiPath;
 	float pathY = 4.0f;
 	aiPath.push_back(Vector3(20, pathY, 20));
@@ -597,9 +645,9 @@ void MyGame::InitCourierLevel() {
 	aiPath.push_back(Vector3(-20, pathY, -20));
 	aiPath.push_back(Vector3(-20, pathY, 20));
 	// Add Enemy (RED) that patrols and targets the player
-	StateGameObject* enemy = AddEnemyToWorld(enemyStartPos);
+	StateGameObject* enemy = AddEnemyToWorld(Vector3(0, 5, 0));
 	enemy->SetPatrolPath(aiPath);
-	enemy->SetTarget(playerObject);
+	enemy->SetTarget(player);
 	enemy->SetGameWorld(&world);
-	enemy->SetResetPoint(playerStartPos);
+	enemy->SetResetPoint(Vector3(0, 5, 0));
 }

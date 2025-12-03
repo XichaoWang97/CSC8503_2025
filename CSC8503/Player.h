@@ -8,7 +8,7 @@ namespace NCL::CSC8503 {
     class Rendering::Mesh;
     class Player : public GameCharacter {
     public:
-        Player(GameWorld* world, const Vector3& position, Rendering::Mesh* mesh, GameTechMaterial material, Vector4 colour);
+        Player(GameWorld* world);
         ~Player();
 
         void Update(float dt) override;

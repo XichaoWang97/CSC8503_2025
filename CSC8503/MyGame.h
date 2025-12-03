@@ -53,6 +53,8 @@ namespace NCL {
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f, std::string name = "Terrain");
 			GameObject* AddCoinToWorld(const NCL::Maths::Vector3& position, Vector3 dimensions, float inverseMass = 1.0f);
 			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
+			Player* AddPlayerToWorld(const NCL::Maths::Vector3& position, float radius);
+			RivalAI* AddRivalAIToWorld(const NCL::Maths::Vector3& position, float radius);
 			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position, float radius);
 
 			// pointers to specific game objects
@@ -61,9 +63,9 @@ namespace NCL {
 			GameObject* pressurePlate = nullptr;
 			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
 			GameObject* coinBonus = nullptr;  // bonus coin
-			Player* playerObject = nullptr;
-			GooseNPC* gooseNPC = nullptr;
-			RivalAI* rivalAI = nullptr;
+			Player* player = nullptr;
+			RivalAI* rival = nullptr;
+			GooseNPC* goose = nullptr;
 			FragileGameObject* packageObject = nullptr;
 			
 			// About coin and score

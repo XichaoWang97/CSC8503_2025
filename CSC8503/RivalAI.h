@@ -13,8 +13,7 @@ using namespace NCL;
 namespace NCL::CSC8503 {
     class RivalAI : public GameCharacter {
     public:
-        RivalAI(GameWorld* world, NavigationGrid* _grid, const Vector3& position, 
-            Rendering::Mesh* mesh, GameTechMaterial material, Vector4 colour);
+        RivalAI(GameWorld* world, NavigationGrid* _grid);
         ~RivalAI();
 
         void Update(float dt) override;

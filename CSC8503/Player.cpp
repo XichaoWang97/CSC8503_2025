@@ -5,29 +5,7 @@
 using namespace NCL;
 using namespace CSC8503;
 
-Player::Player(GameWorld* world, const Vector3& position, 
-    Rendering::Mesh* mesh, GameTechMaterial material, Vector4 colour) : GameCharacter("Player", world) {
-
-    float meshSize = 1.0f;
-    float inverseMass = 0.5f;
-
-    // set physics volume
-    SphereVolume* volume = new SphereVolume(0.5f);
-    SetBoundingVolume(volume);
-
-	// set position
-    GetTransform().SetScale(Vector3(meshSize, meshSize, meshSize)).SetPosition(position);
-
-	// set render object
-    SetRenderObject(new RenderObject(GetTransform(), mesh, material));
-    GetRenderObject()->SetColour(colour);
-
-    // set physics object
-	PhysicsObject* physicsObj = new PhysicsObject(GetTransform(), GetBoundingVolume());
-	physicsObj->SetInverseMass(inverseMass);
-	physicsObj->InitSphereInertia();
-	physicsObj->SetElasticity(0.0f); // no bounce
-	SetPhysicsObject(physicsObj);
+Player::Player(GameWorld* world) : GameCharacter("Player", world) {
 }
 
 Player::~Player() {
