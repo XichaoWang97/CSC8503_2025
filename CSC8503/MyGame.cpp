@@ -191,8 +191,8 @@ void MyGame::UpdateGame(float dt) {
 
 		// --- 门的动作 ---
 		Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
-		// 门初始在 Y=-10 (地面上), 打开时移动到 Y=-30 (沉入地下)
-		float targetY = isTriggered ? -30.0f : -10.0f;
+		// 门初始在 Y=10 (地面上), 打开时移动到 Y=-10 (沉入地下)
+		float targetY = isTriggered ? -10.0f : 10.0f;
 		float doorSpeed = 20.0f;
 
 		if (abs(doorPos.y - targetY) > 0.01f) {
@@ -257,9 +257,9 @@ void MyGame::UpdateGame(float dt) {
 		Vector3 pPos = playerObject->GetTransform().GetPosition();
 		Vector3 gPos = gooseNPC->GetTransform().GetPosition();
 
-		// 简单的距离检测：如果距离小于 2.0 米，视为被撞
+		// simple distance check, large than goose size
 		float dist = Vector::Length((pPos - gPos));
-		if (dist < 2.0f) {
+		if (dist < 3.6f) {
 			isGameOver = true;
 		}
 	}
@@ -466,17 +466,16 @@ StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	return character;
 }
 
-GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position)
+GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position, float radius)
 {
-	float meshSize = 3.0f;
 	float inverseMass = 0.5f;
 
 	GooseNPC* goose = new GooseNPC(navGrid, playerObject); // init goose with navgrid and player reference
-	AABBVolume* volume = new AABBVolume(Vector3(1.0f, 1.0f, 1.0f) * meshSize);
+	SphereVolume* volume = new SphereVolume(radius);
 	goose->SetBoundingVolume(volume);
 
 	goose->GetTransform()
-		.SetScale(Vector3(meshSize, meshSize, meshSize))
+		.SetScale(Vector3(radius, radius, radius))
 		.SetPosition(position);
 
 	goose->SetRenderObject(new RenderObject(goose->GetTransform(), gooseMesh, notexMaterial));
@@ -538,7 +537,7 @@ void MyGame::InitCourierLevel() {
 	world.AddGameObject(rivalAI);
 
 	// Add Goose NPC
-	gooseNPC = AddGooseNPCToWorld(Vector3(-60, 5, 30));
+	gooseNPC = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
 
 	// Add packageObject
 	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 5, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color

@@ -53,8 +53,7 @@ namespace NCL {
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f, std::string name = "Terrain");
 			GameObject* AddCoinToWorld(const NCL::Maths::Vector3& position, Vector3 dimensions, float inverseMass = 1.0f);
 			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
-
-			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position);
+			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position, float radius);
 
 			// pointers to specific game objects
 			GameObject* targetZone = nullptr;  // destination

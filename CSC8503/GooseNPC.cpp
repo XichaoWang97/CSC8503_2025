@@ -23,8 +23,7 @@ void GooseNPC::Update(float dt) {
     if (rootNode) {
         rootNode->Execute(dt);
     }
-    // 调用父类 Update 以处理物理等通用逻辑
-    // StateGameObject::Update(dt); // 如果不需要父类里的 StateMachine 更新，可以直接调用 GameObject::Update
+
     GameObject::Update(dt);
 }
 
@@ -43,7 +42,7 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
     Vector3 targetPos = playerTarget->GetTransform().GetPosition();
     Vector3 myPos = GetTransform().GetPosition();
 
-    // 1. 路径计算 (每 0.5 秒更新一次，节省性能)
+    // 1. 路径计算 (每 1.0 秒更新一次，节省性能)
     timeSinceLastPathCalc += dt;
     if (timeSinceLastPathCalc > 1.0f) {
         CalculatePathTo(targetPos);
@@ -72,14 +71,14 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
     dir.y = 0;
     float distToNode = Vector::Length(dir);
 
-    // 如果到达当前路径点，移除并前往下一个
-    if (distToNode < 2.0f) {
+	// 如果到达当前路径点，移除并前往下一个, 这个数值至关重要，如果调整的不对可能会造成寻路出现问题
+    if (distToNode < 20.0f) {
         pathPoints.erase(pathPoints.begin());
         return Ongoing;
     }
 
     // 3. 物理移动
-    GetPhysicsObject()->AddForce(Vector::Normalise(-dir) * chaseSpeed);
+    GetPhysicsObject()->AddForce(Vector::Normalise(dir) * chaseSpeed);
     LookAt(nextWaypoint, dt);
     
 	// Draw Debug Lines

@@ -275,7 +275,7 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
     float dist = Vector::Length(targetPos - GetTransform().GetPosition());
     // 新增逻辑1
     // 1. 到达判断
-    if (dist < 3.0f) {
+    if (dist < 13.0f) {
         GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0)); // 刹车
         return Success; // 到达
     }
