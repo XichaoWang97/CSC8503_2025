@@ -18,28 +18,24 @@ namespace NCL::CSC8503 {
 
         void Update(float dt) override;
 
-        // 设置必要的外部引用
         void SetPlayer(GameCharacter* p) { player = p; }
         void SetPackageSpawn(Vector3 pos) { packageSpawnPos = pos; }
 
-        // 外部系统调用此函数增加AI分数
+		// AI add/get score
         void AddScore(int amount) { currentScore += amount; }
         int  GetScore() const { return currentScore; }
 
     protected:
         void BuildBehaviourTree();
 
-        // --- 辅助感知函数 ---
-        GameObject* FindClosestObject(std::string name); // 找石头或金币
-        GameObject* FindPackage(); // 特指找包裹
-        bool IsProneToBreak(GameObject* obj); // 判断目标是否是易碎品
+        GameObject* FindClosestObject(std::string name);
+        GameObject* FindPackage();
 
-        // --- 行为逻辑函数 ---
         void CalculatePath(Vector3 targetPos);
-        void LookAt(Vector3 targetPos); // 转向目标以便投掷或抓取
-        void Jump(); // 执行跳跃
-        void CheckObstaclesAndJump(float dt); // 检测前方障碍并决定是否跳跃
-        // --- 行为树 Action ---
+		void LookAt(Vector3 targetPos); // look at target position
+        void Jump();
+
+		// Behaviour Nodes:
         BehaviourState HasHighScore(float dt);      // 条件：分数够了吗？
         BehaviourState IsHoldingPackage(float dt);  // 条件：我拿着包裹吗？
         BehaviourState IsHoldingStone(float dt);    // 条件：我拿着石头吗？
@@ -56,11 +52,10 @@ namespace NCL::CSC8503 {
 
         GameWorld* gameWorld;
         NavigationGrid* grid;
-        GameCharacter* player;      // 玩家引用
-        GameObject* currentTarget;  // 当前关注的物体（石头/金币/包裹）
+        GameCharacter* player;
+		GameObject* currentTarget;  // objective target
 
-        Vector3 packageSpawnPos;    // 包裹重生点
-        BehaviourNode* rootNode;
+		Vector3 packageSpawnPos;    // package camp position(pakcage rebirth point)
 
         NavigationPath currentPath;
         std::vector<Vector3> pathPoints;
@@ -69,8 +64,8 @@ namespace NCL::CSC8503 {
         int winningScore;
         float moveSpeed;
 
-		bool IsOnGround(); // check if AI is on the ground
-        float jumpCooldown = 0.0f; // 跳跃冷却，防止连跳飞天
+		bool IsOnGround();
+        float jumpCooldown = 0.0f;
         float timeSinceLastPathCalc;
     };
 }
