@@ -9,7 +9,7 @@ using namespace CSC8503;
 GooseNPC::GooseNPC(NavigationGrid* _grid, GameObject* _player) : StateGameObject("Goose") {
     grid = _grid;
     playerTarget = _player;
-	chaseSpeed = 5.0f; // chase speed of the goose
+	chaseSpeed = 3.5f; // chase speed of the goose
     rootNode = nullptr;
     timeSinceLastPathCalc = 0.0f;
     BuildBehaviourTree();
@@ -54,7 +54,7 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
         // 如果没有路径点（就在旁边，或者寻路失败），直接向玩家移动
         Vector3 dir = (targetPos - myPos);
         dir.y = 0;
-        if (Vector::Length(dir) > 1.0f) {
+        if (Vector::Length(dir) > 2.0f) {
             GetPhysicsObject()->AddForce(Vector::Normalise(dir) * chaseSpeed);
             LookAt(targetPos, dt);
         }
@@ -92,8 +92,8 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
         Vector3 b = pathPoints[i + 1];
 
         // 稍微抬高一点，防止被地板遮挡
-        a.y += 0.2;
-        b.y += 0.2f;
+        a.y += 1;
+        b.y += 1;
 
         Debug::DrawLine(a, b, Vector4(0, 0, 1, 1));
     }

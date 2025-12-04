@@ -472,7 +472,7 @@ Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radi
 
 	player = new Player(&world);
 	
-	SphereVolume* volume = new SphereVolume(radius); // set bounding volume
+	SphereVolume* volume = new SphereVolume(radius * 0.5f); // set bounding volume
 	player->SetBoundingVolume(volume);
 	
 	player->GetTransform() // set transform
@@ -500,7 +500,7 @@ RivalAI* MyGame::AddRivalAIToWorld(const NCL::Maths::Vector3& position, float ra
 
 	rival = new RivalAI(&world, navGrid);
 
-	SphereVolume* volume = new SphereVolume(radius);
+	SphereVolume* volume = new SphereVolume(radius * 0.5f);
 	rival->SetBoundingVolume(volume);
 
 	rival->GetTransform()
@@ -586,6 +586,7 @@ void MyGame::InitCourierLevel() {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
 	rival = AddRivalAIToWorld(Vector3(-60, 5, 50), 1.0f); // red color
+	rival->SetPlayer(player);
 	goose = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
 
 	// Add packageObject

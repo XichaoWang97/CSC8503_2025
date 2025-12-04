@@ -40,7 +40,7 @@ namespace NCL::CSC8503 {
                 GameObject* target = (GameObject*)collision.node;
                 float dist = collision.rayDistance;
 
-                if (dist < 30.0f) {
+                if (dist < 20.0f) {
                     if (target->GetName() == "Stone" || target->GetName()=="CubeStone") {
                         AttachItem(target);
                     }

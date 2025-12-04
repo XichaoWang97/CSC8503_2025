@@ -18,7 +18,7 @@ RivalAI::RivalAI(GameWorld* world, NavigationGrid* _grid) : GameCharacter("Rival
     currentScore = 0;
     winningScore = 3; // 假设收集3个就赢
     packageSpawnPos = Vector3(0, 0, 0); // 默认，需外部Set
-
+    timeSinceLastPathCalc = 0.0f;
     BuildBehaviourTree();
     //  init like player
 }
@@ -99,7 +99,7 @@ void RivalAI::LookAt(Vector3 targetPos) {
     dir.y = 0;
     dir = Vector::Normalise(dir);
 
-    // 简单的 LookAt 矩阵转四元数
+	// set orientation
     if (Vector::Length(dir) > 0) {
         Matrix4 lookAt = Matrix::View(Vector3(0, 0, 0), -dir, Vector3(0, 1, 0));
         GetTransform().SetOrientation(Quaternion(Matrix::Inverse(lookAt)));
@@ -126,6 +126,11 @@ GameObject* RivalAI::FindClosestObject(std::string name) {
 
 GameObject* RivalAI::FindPackage() {
     return FindClosestObject("FragilePackage");
+
+    GameObject* item = GetHeldItem();
+    if (item && item->GetName() == "Stone") {
+		ThrowHeldItem(Vector3(0, 0, 0)); // drop stone if holding
+    }
 }
 
 void RivalAI::CalculatePath(Vector3 targetPos) {
@@ -139,7 +144,7 @@ void RivalAI::CalculatePath(Vector3 targetPos) {
     }
 }
 
-// ================= 行为逻辑 (Conditions) =================
+// Conditions: score and holding states
 
 BehaviourState RivalAI::HasHighScore(float dt) {
     return (currentScore >= winningScore) ? Success : Failure;
@@ -153,20 +158,18 @@ BehaviourState RivalAI::IsHoldingPackage(float dt) {
 
 BehaviourState RivalAI::IsHoldingStone(float dt) {
     GameObject* item = GetHeldItem();
-    // 假设石头名字是 "Stone" 或 "Rock"
     if (item && item->GetName() == "Stone") return Success;
     return Failure;
 }
 
 BehaviourState RivalAI::DoesPlayerHavePackage(float dt) {
     if (!player) return Failure;
-    // 假设 Player 类有 GetHeldItem 方法 (继承自 GameCharacter)
     GameObject* playerItem = player->GetHeldItem();
     if (playerItem && playerItem->GetName() == "FragilePackage") return Success;
     return Failure;
 }
 
-// ================= 行为逻辑 (Actions) =================
+// Actions
 
 BehaviourState RivalAI::RunAwayFromPlayer(float dt) {
     if (!player) return Failure;
@@ -198,7 +201,7 @@ BehaviourState RivalAI::RunAwayFromPlayer(float dt) {
     }
 
     Debug::DrawLine(myPos, targetPos, Vector4(0, 1, 1, 1)); // 画出逃跑线
-    return Ongoing; // 只要一直满足条件就一直跑
+    return Ongoing;
 }
 
 // find closest stone
@@ -218,170 +221,116 @@ BehaviourState RivalAI::GetClosestCoin(float dt) {
         currentTarget = coin;
         return Success;
     }
-    // 如果没有金币了，可能意味着要赢了或者去哪？
+
     return Failure;
 }
 
 BehaviourState RivalAI::GetPackageOrCamp(float dt) {
     GameObject* pkg = FindPackage();
     if (pkg && pkg->IsActive()) {
-        currentTarget = pkg; // 找到了，去抓
+		currentTarget = pkg; // catch the package
     }
     else {
-        // 没找到或者不活跃，去生成点蹲着
-        // 为了让 MoveToTarget 工作，我们需要一个临时的目标或者把 targetPos 存起来
-        // 既然 MoveToTarget 依赖 currentTarget，我们这里可以设置 currentTarget 为 nullptr
-        // 但为了统一，我们可以利用 MoveToTarget 的特殊逻辑，或者创建一个虚拟物体？
-        // 更好的方法：MoveToTarget 检查 currentTarget，如果为空，检查是否我们要去 SpawnPos
-
-        currentTarget = nullptr; // 标记为空，意味着去蹲点
+        currentTarget = nullptr;
     }
     return Success;
 }
 
 BehaviourState RivalAI::MoveToTarget(float dt) {
     Vector3 targetPos;
-
+    Vector3 myPos = GetTransform().GetPosition();
+    
     if (currentTarget) {
-        if (!currentTarget->IsActive()) return Failure; // 目标消失
+        if (!currentTarget->IsActive()) return Failure;
         targetPos = currentTarget->GetTransform().GetPosition();
     }
     else {
-        targetPos = packageSpawnPos; // 没有具体物体目标，就去生成点
-    }
-    //Vector3 myPos = GetTransform().GetPosition();
-    float dist = Vector::Length(targetPos - GetTransform().GetPosition());
-    // 新增逻辑1
-    // 1. 到达判断
-    if (dist < 13.0f) {
-        GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0)); // 刹车
-        return Success; // 到达
+		targetPos = packageSpawnPos; // if no target, go to camp point(start position of package)
     }
 
-    // 2. 寻路刷新 (简单处理：每隔一段距离或路径空了重新算)
-    if (pathPoints.empty()) {
+	// calculate path periodically 1.0s per time
+    timeSinceLastPathCalc += dt;
+    if (timeSinceLastPathCalc > 1.0f) {
         CalculatePath(targetPos);
+        timeSinceLastPathCalc = 0.0f;
     }
-
-    // 3. 移动
-    if (!pathPoints.empty()) {
-        Vector3 nextWaypoint = pathPoints[0];
-        Vector3 dir = nextWaypoint - GetTransform().GetPosition();
+    
+	// if no path, go to the target directly
+    if (pathPoints.empty()) {
+        Vector3 dir = (targetPos - myPos);
         dir.y = 0;
-
-        float distToNode = Vector::Length(dir);
-        if (distToNode < 3.0f) {
-            pathPoints.erase(pathPoints.begin()); // 到了这个点，删掉
-            return Ongoing;
+		if (Vector::Length(dir) > 1.0f) { // only care about horizontal distance
+            GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 15.0f); // set it slower than player
+            LookAt(targetPos);
+        }
+        else {
+            GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
         }
 
-        // 物理移动
-        GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 20.0f);
-        LookAt(nextWaypoint);
-
-        // Draw Debug Lines
-        // 1. 画出鹅到当前路标的线（短线，红色）
-        Debug::DrawLine(GetTransform().GetPosition(), nextWaypoint, Vector4(1, 0, 0, 1));
-        // 2. 画出完整的路径规划（蓝色折线）
-        // 这样你能看到从 (-60, 40) 怎么一步步连到 (-7, 80)
-        for (size_t i = 0; i < pathPoints.size() - 1; ++i) {
-            Vector3 a = pathPoints[i];
-            Vector3 b = pathPoints[i + 1];
-
-            // 稍微抬高一点，防止被地板遮挡
-            a.y += 0.2;
-            b.y += 0.2f;
-
-            Debug::DrawLine(a, b, Vector4(0, 0, 1, 1));
-        }
-        // 3. 画出终点位置（绿色柱子）
-        Debug::DrawLine(targetPos, targetPos + Vector3(0, 10, 0), Vector4(0, 1, 0, 1));
-
-    }
-    else {
-        // 寻路失败（可能在直线上），直接走
-        Vector3 dir = (targetPos - GetTransform().GetPosition());
+        // Jump logic
+        float yDiff = targetPos.y - myPos.y;
         dir.y = 0;
-        GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 20.0f);
-        LookAt(targetPos);
+        float xzDist = Vector::Length(dir);
+        
+        if (yDiff >= 1.0f && xzDist <= 1.0f) { // jump conditions
+            Jump();
+        }
+		return Success; // catch
     }
+
+	// get next waypoint
+    Vector3 nextWaypoint = pathPoints[0];
+    nextWaypoint.y = myPos.y;
+    Vector3 dir = nextWaypoint - myPos;
+    dir.y = 0;
+    float distToNode = Vector::Length(dir);
+
+	// get to the point
+    if (distToNode < 10.0f) {
+        pathPoints.erase(pathPoints.begin()); 
+        return Ongoing;
+    }
+
+	// physical move
+    GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 15.0f);
+    LookAt(nextWaypoint);
+
+    // Draw Debug Lines
+    Debug::DrawLine(GetTransform().GetPosition(), nextWaypoint, Vector4(1, 0, 0, 1));
+	// complete path(blue)
+    for (size_t i = 0; i < pathPoints.size() - 1; ++i) {
+        Vector3 a = pathPoints[i];
+        Vector3 b = pathPoints[i + 1];
+		// a little up
+        a.y += 1;
+        b.y += 1;
+        Debug::DrawLine(a, b, Vector4(0, 0, 1, 1));
+    }
+	// draw target(green)
+    Debug::DrawLine(targetPos, targetPos + Vector3(0, 10, 0), Vector4(0, 1, 0, 1));
 
     return Ongoing;
 }
-/*BehaviourState RivalAI::MoveToTarget(float dt) {
-    bool usingPath = false;
 
-    // --- 新增逻辑 1: 处理高处的金币 (Vertical Jump) ---
-    // 如果水平距离很近，但是目标在头顶，就跳
-    float yDiff = targetPos.y - myPos.y;
-    float hDist = Vector::Length(Vector3(targetPos.x, 0, targetPos.z) - Vector3(myPos.x, 0, myPos.z));
-
-    // 如果目标比我高 2.0米以上，且水平距离小于 2.0米
-    if (yDiff > 2.0f && hDist < 2.0f) {
-        LookAt(targetPos); // 抬头看（虽然LookAt只处理水平，但物理上保持朝向）
-        GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0)); // 停下来准备起跳
-        Jump();
-        return Ongoing; // 还在努力中
-    }
-
-    // --- 逻辑 2: 到达检测 ---
-    if (dist < 3.0f) {
-        // 如果高度差不大，才算真的到了 (防止站在金币正下方也算到了)
-        if (abs(yDiff) < 2.0f) {
-            GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
-            return Success;
-        }
-    }
-
-    // --- 逻辑 3: 寻路 (绕过高墙) ---
-    // 如果没有路径或者离当前路径点太远，重新计算
-    if (pathPoints.empty()) {
-        CalculatePath(targetPos);
-    }
-
-    Vector3 moveDir;
-    Vector3 nextDest = targetPos; // 默认直奔目标
-
-    if (!pathPoints.empty()) {
-        nextDest = pathPoints[0];
-        float distToNode = Vector::Length(nextDest - myPos);
-        if (distToNode < 3.0f) {
-            pathPoints.erase(pathPoints.begin());
-            return Ongoing;
-        }
-        usingPath = true; // 标记我们在使用导航网格
-    }
-
-    // --- 逻辑 4: 移动执行 ---
-    moveDir = (nextDest - myPos);
-    moveDir.y = 0;
-    moveDir = Vector::Normalise(moveDir);
-
-    // 施加力移动
-    GetPhysicsObject()->AddForce(moveDir * 20.0f);
-    LookAt(nextDest);
-
-    // --- 新增逻辑 5: 动态避障 (跳过矮障碍) ---
-    // 只有在移动时才检测前方
-    CheckObstaclesAndJump(dt);
-
-    return Ongoing;
-}*/
 BehaviourState RivalAI::AttemptGrab(float dt) {
-    if (!currentTarget) return Failure; // 蹲点模式下不需要抓东西
+    if (!currentTarget) return Failure;
 
     float dist = Vector::Length(currentTarget->GetTransform().GetPosition() - GetTransform().GetPosition());
 
-    if (dist < 5.0f) {
-        LookAt(currentTarget->GetTransform().GetPosition()); // 必须看着它才能Raycast抓到
-
-        // 确保CD过了
+    if (dist < 10.0f) {
+        LookAt(currentTarget->GetTransform().GetPosition());
+		// throw current held item first
+        GameObject* item = GetHeldItem();
+        if(item){
+            ThrowHeldItem(Vector3(0, 0, 0));
+        }
+		// make sure cooldown is ready
         if (actionCooldown <= 0.0f) {
             Vector3 aimDir = GetTransform().GetOrientation() * Vector3(0, 0, 1);
-            TryGrab(aimDir); // 父类方法
-            actionCooldown = 1.0f; // 重置CD
+            TryGrab(aimDir);
+            actionCooldown = 1.0f;
 
-            if (GetHeldItem() == currentTarget) return Success; // 抓到了！
+            if (GetHeldItem() == currentTarget) return Success; // catch!
         }
     }
     return Failure;
@@ -418,54 +367,21 @@ BehaviourState RivalAI::ThrowAtPlayer(float dt) {
 
 void RivalAI::Jump() {
     if (jumpCooldown <= 0.0f && IsOnGround()) {
-        // 施加向上的冲量，数值参考 Player (15.0f)
         GetPhysicsObject()->ApplyLinearImpulse(Vector3(0, 15.0f, 0));
-        jumpCooldown = 1.0f; // 1秒冷却
-        // 稍微加一点向前的力，防止原地起跳被卡住
-        Vector3 fwd = GetTransform().GetOrientation() * Vector3(0, 0, -1);
+        jumpCooldown = 1.0f;
+		// add forward impulse to avoid getting stuck
+        Vector3 fwd = GetTransform().GetOrientation() * Vector3(0, 0, 1);
         GetPhysicsObject()->ApplyLinearImpulse(fwd * 2.0f);
     }
 }
 
 bool RivalAI::IsOnGround() {
-    // 向下发射射线检测地面
+	// raycast down to check ground
     Vector3 pos = GetTransform().GetPosition();
     Ray ray(pos, Vector3(0, -1, 0));
     RayCollision collision;
-    // 1.1f 是腿长+一点缓冲
     if (gameWorld->Raycast(ray, collision, true, this)) {
         if (collision.rayDistance < 1.1f) return true;
     }
     return false;
-}
-
-void RivalAI::CheckObstaclesAndJump(float dt) {
-    if (jumpCooldown > 0) return;
-
-    Vector3 pos = GetTransform().GetPosition();
-    Vector3 fwd = GetTransform().GetOrientation() * Vector3(0, 0, -1); // 假设模型朝向是 -Z，如果是 Z 则用 (0,0,1)
-
-    // 1. 膝盖高度射线 (检测有没有障碍物)
-    Vector3 lowOrigin = pos + Vector3(0, 0.5f, 0);
-    Ray lowRay(lowOrigin, fwd);
-    RayCollision lowCol;
-
-    // 2. 头部高度射线 (检测障碍物是否够矮)
-    Vector3 highOrigin = pos + Vector3(0, 2.5f, 0); // 比如障碍物高2米，这里射向2.5米
-    Ray highRay(highOrigin, fwd);
-    RayCollision highCol;
-
-    bool hitLow = gameWorld->Raycast(lowRay, lowCol, true, this);
-    bool hitHigh = gameWorld->Raycast(highRay, highCol, true, this);
-
-    // 逻辑：如果下面撞到了东西(距离近)，但上面没撞到 -> 说明是矮墙 -> 跳！
-    if (hitLow && lowCol.rayDistance < 3.0f) {
-        if (!hitHigh || highCol.rayDistance > 3.5f) { // 上面是空的，或者很远才有墙
-            Jump();
-            return;
-        }
-    }
-
-    // 补充：如果上下都撞到了，那是高墙，导航网格应该处理，但如果卡住了...
-    // 这里通常不需要处理，因为 NavigationPath 会规划绕路。
 }

@@ -71,5 +71,6 @@ namespace NCL::CSC8503 {
 
 		bool IsOnGround(); // check if AI is on the ground
         float jumpCooldown = 0.0f; // ÌøÔ¾ÀäÈ´£¬·ÀÖ¹Á¬Ìø·ÉÌì
+        float timeSinceLastPathCalc;
     };
 }
