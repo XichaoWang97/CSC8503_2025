@@ -221,13 +221,22 @@ void MyGame::UpdateGame(float dt) {
 		if (!c->IsActive()) continue;
 
 		// calculate distance to player
-		float dist = Vector::Length((player->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+		float player_dist = Vector::Length((player->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+		float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
 		GameObject* playerHeld = player->GetHeldItem();
+		GameObject* rivalHeld = rival->GetHeldItem();
 		// collection radius 2.5f, need FragilePackage to collect
 		if (playerHeld) {
-			if (dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
+			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
 				world.RemoveGameObject(c, true); // remove coin from world
 				score++;
+				coins.erase(coins.begin() + i); // remove coin from vector
+			}
+		}
+		if (rivalHeld) {
+			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
+				world.RemoveGameObject(c, true); // remove coin from world
+				rival->AddScore(1); // rival score +
 				coins.erase(coins.begin() + i); // remove coin from vector
 			}
 		}
@@ -268,7 +277,9 @@ void MyGame::UpdateGame(float dt) {
 	std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
 	// 根据是否收集满显示不同颜色
 	Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
-	Debug::Print(scoreText, Vector2(75, 10), scoreColor); // 左上角显示
+	Debug::Print(scoreText, Vector2(75, 10), scoreColor);
+	std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
+	Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
 	//----------------------------------------------------------------------------------
 	
 	// player object update
@@ -413,11 +424,11 @@ GameObject* MyGame::AddCoinToWorld(const Vector3& position, Vector3 dimensions, 
 	GameObject* coin = new GameObject("Coin");
 
 	// set bounding volume
-	OBBVolume* volume = new OBBVolume(dimensions);
+	OBBVolume* volume = new OBBVolume(Vector3(dimensions.x * 5.0f, dimensions.y * 5.0f, dimensions.z));
 	coin->SetBoundingVolume(volume);
 
 	coin->GetTransform()
-		.SetScale(dimensions * 2.0f)
+		.SetScale(dimensions)
 		.SetPosition(position);
 
 	coin->SetRenderObject(new RenderObject(coin->GetTransform(), coinMesh, glassMaterial));
@@ -597,7 +608,7 @@ void MyGame::InitCourierLevel() {
 
 	// Add Sphere and CubeStone
 	AddSphereToWorld(Vector3(-55, 3, 60), 2.0f, 1.0f); // test sphere above package
-	cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
+	//cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
 	// Add coins at various locations, mass = 0 for floating
 	AddCoinToWorld(Vector3(-50, 5, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);

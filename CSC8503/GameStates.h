@@ -104,7 +104,8 @@ namespace NCL {
 				}
 
 				Debug::Print("Press ESC to Pause", Vector2(5, 5), Debug::YELLOW);
-				Debug::Print("Press 1 to Return to Main Menu", Vector2(5, 10), Debug::YELLOW);
+				Debug::Print("Press 1 to Return to Main Menu", Vector2(5, 8), Debug::YELLOW);
+				Debug::Print("Press 2 to Draw Bounding Volume", Vector2(5, 11), Debug::YELLOW); // Draw function is in PhysicsSystem.cpp
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					*newState = new PauseState(game);
@@ -113,7 +114,10 @@ namespace NCL {
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM1)) {
 					return PushdownResult::Pop;
 				}
-
+				// Debug Drawing volume
+				if (Window::GetKeyboard()->KeyDown(KeyCodes::NUM2)) {
+					physics->DrawDebugData();
+				}
 				return PushdownResult::NoChange;
 			}
 

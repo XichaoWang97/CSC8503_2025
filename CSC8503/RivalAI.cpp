@@ -263,9 +263,9 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
             GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 15.0f); // set it slower than player
             LookAt(targetPos);
         }
-        else {
+        /*else {
             GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
-        }
+        }*/
 
         // Jump logic
         float yDiff = targetPos.y - myPos.y;
@@ -367,18 +367,18 @@ BehaviourState RivalAI::ThrowAtPlayer(float dt) {
 
 void RivalAI::Jump() {
     if (jumpCooldown <= 0.0f && IsOnGround()) {
-        GetPhysicsObject()->ApplyLinearImpulse(Vector3(0, 15.0f, 0));
+        GetPhysicsObject()->ApplyLinearImpulse(Vector3(0, 15, 0));
         jumpCooldown = 1.0f;
 		// add forward impulse to avoid getting stuck
         Vector3 fwd = GetTransform().GetOrientation() * Vector3(0, 0, 1);
-        GetPhysicsObject()->ApplyLinearImpulse(fwd * 2.0f);
+        GetPhysicsObject()->ApplyLinearImpulse(fwd * 1.5f);
     }
 }
 
 bool RivalAI::IsOnGround() {
 	// raycast down to check ground
     Vector3 pos = GetTransform().GetPosition();
-    Ray ray(pos, Vector3(0, -1, 0));
+    Ray ray(pos, Vector3(0, -1.0, 0));
     RayCollision collision;
     if (gameWorld->Raycast(ray, collision, true, this)) {
         if (collision.rayDistance < 1.1f) return true;
