@@ -248,7 +248,7 @@ void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, Collis
 	//transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA->GetInverseMass() / totalMass)));
 	//transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB->GetInverseMass() / totalMass)));
 
-	float penetrationSlop = 0.002f;
+	float penetrationSlop = 0.01f;
 	// 2. 引入 Bias (位置修正系数)：范围 0.0 ~ 1.0
 	// 0.1 表示每帧只修 10% 的穿透（很软，像泥巴, 0.8 表示每帧修 80% 的穿透（硬，但不会太弹）
 	float positionCorrectionBias = 0.6f;

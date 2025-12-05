@@ -405,7 +405,7 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 	for (int i = 0; i < 3; ++i) {
 		for (int j = 0; j < 3; ++j) {
 			R[i][j] = Vector::Dot(A[i], B[j]);
-			absR[i][j] = std::fabs(R[i][j]) + EPSILON; // 加一点偏移避免数值误差
+			absR[i][j] = std::fabs(R[i][j]); // don't add EPSILON here; handle numeric checks separately
 		}
 	}
 
@@ -420,10 +420,16 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 	float minPenetration = FLT_MAX;
 	Vector3 bestAxis;     // 碰撞法线（世界空间）
 
-	auto updateBestAxis = [&](const Vector3& axis, float penetration) {
+	// Track which axis caused the min penetration: 0=A axis,1=B axis,2=cross
+	int bestAxisType = -1;
+	int bestAxisIndex = -1;
+
+	auto updateBestAxis = [&](const Vector3& axis, float penetration, int type, int index) {
 		if (penetration < minPenetration) {
 			minPenetration = penetration;
 			bestAxis = axis;
+			bestAxisType = type;
+			bestAxisIndex = index;
 		}
 		};
 
@@ -443,12 +449,10 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 
 		float penetration = (ra + rb) - dist;
 
-		// 法线要从 A 指向 B：根据 t 在该轴上的符号调整方向
+		// 用局部分量 t[i] 的符号决定法线方向（A 轴方向）
 		Vector3 axis = A[i];
-		if (Vector::Dot(tWorld, axis) < 0.0f) {
-			axis = -axis;
-		}
-		updateBestAxis(axis, penetration);
+		if (t[i] < 0.0f) axis = -axis;
+		updateBestAxis(axis, penetration, 0, i);
 	}
 
 	// --- 3.2 B 的三个轴 ---
@@ -459,10 +463,12 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 			halfSizeA.y * absR[1][j] +
 			halfSizeA.z * absR[2][j];
 
-		float dist =
-			std::fabs(t.x * R[0][j] +
-				t.y * R[1][j] +
-				t.z * R[2][j]);
+		// 有符号投影 t 在 B 的轴方向上的值：
+		float distSigned =
+			t.x * R[0][j] +
+			t.y * R[1][j] +
+			t.z * R[2][j];
+		float dist = std::fabs(distSigned);
 
 		if (dist > ra + rb) {
 			return false; // 分离轴
@@ -471,10 +477,8 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 		float penetration = (ra + rb) - dist;
 
 		Vector3 axis = B[j];
-		if (Vector::Dot(tWorld, axis) < 0.0f) {
-			axis = -axis;
-		}
-		updateBestAxis(axis, penetration);
+		if (distSigned < 0.0f) axis = -axis;
+		updateBestAxis(axis, penetration, 1, j);
 	}
 
 	// --- 3.3 交叉轴 Ai x Bj（9 个） ---
@@ -497,11 +501,12 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 				halfSizeB[(j + 1) % 3] * absR[i][(j + 2) % 3] +
 				halfSizeB[(j + 2) % 3] * absR[i][(j + 1) % 3];
 
-			// t 在该交叉轴上的投影长度
-			float dist =
-				std::fabs(
-					t[(i + 2) % 3] * R[(i + 1) % 3][j] -
-					t[(i + 1) % 3] * R[(i + 2) % 3][j]);
+			// 带符号投影长度（用于方向判定）
+			float signedDist =
+				t[(i + 2) % 3] * R[(i + 1) % 3][j] -
+				t[(i + 1) % 3] * R[(i + 2) % 3][j];
+
+			float dist = std::fabs(signedDist);
 
 			if (dist > ra + rb) {
 				return false; // 分离轴
@@ -509,10 +514,9 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 
 			float penetration = (ra + rb) - dist;
 
-			if (Vector::Dot(tWorld, axis) < 0.0f) {
-				axis = -axis;
-			}
-			updateBestAxis(axis, penetration);
+			// 使用 signedDist 的符号决定 axis 方向
+			if (signedDist < 0.0f) axis = -axis;
+			updateBestAxis(axis, penetration, 2, i * 3 + j);
 		}
 	}
 
@@ -520,33 +524,177 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 	Vector3 collisionNormal = Vector::Normalise(bestAxis);
 	float penetration = minPenetration;
 
-	// === 5. 近似计算接触点（用支持函数求两 OBB 在法线方向的最外点） ===
-	auto SupportPointOBB = [](const Vector3& centre,
-		const Vector3 axes[3],
-		const Vector3& halfSize,
-		const Vector3& dir) {
-			Vector3 result = centre;
-			for (int i = 0; i < 3; ++i) {
-				float sign = Vector::Dot(dir, axes[i]) > 0.0f ? 1.0f : -1.0f;
-				result += axes[i] * (sign * halfSize[i]);
+	// === 5. 使用 clipping 生成 contact manifold（多点） ===
+
+	// helper: support point on OBB in given direction (world space)
+	auto SupportPointOBB = [](const Vector3& centre, const Vector3 axes[3], const Vector3& halfSize, const Vector3& dir) {
+		Vector3 result = centre;
+		for (int k = 0; k < 3; ++k) {
+			float sign = Vector::Dot(dir, axes[k]) > 0.0f ? 1.0f : -1.0f;
+			result += axes[k] * (sign * halfSize[k]);
+		}
+		return result;
+		};
+
+	// helper: get 4 vertices of a face of an OBB (world space)
+	auto GetFaceVertices = [&](const Vector3& centre, const Vector3 axes[3], const Vector3& halfSize, int faceAxisIndex, int faceSign) {
+		Vector3 u = axes[(faceAxisIndex + 1) % 3] * halfSize[(faceAxisIndex + 1) % 3];
+		Vector3 v = axes[(faceAxisIndex + 2) % 3] * halfSize[(faceAxisIndex + 2) % 3];
+		Vector3 faceCenter = centre + axes[faceAxisIndex] * (faceSign * halfSize[faceAxisIndex]);
+
+		std::vector<Vector3> verts(4);
+		verts[0] = faceCenter + u + v;
+		verts[1] = faceCenter + u - v;
+		verts[2] = faceCenter - u - v;
+		verts[3] = faceCenter - u + v;
+		return verts;
+		};
+
+	// helper: clip polygon (list of Vector3) against a plane (planePoint + planeNormal). Keep side where dot(n, x - planePoint) <= 0
+	auto ClipPolygonAgainstPlane = [&](const std::vector<Vector3>& poly, const Vector3& planePoint, const Vector3& planeNormal) {
+		std::vector<Vector3> out;
+		if (poly.empty()) return out;
+		auto isInside = [&](const Vector3& p) {
+			return Vector::Dot(planeNormal, p - planePoint) <= 1e-6f; // tolerance
+			};
+
+		for (size_t i = 0; i < poly.size(); ++i) {
+			Vector3 a = poly[i];
+			Vector3 b = poly[(i + 1) % poly.size()];
+			bool inA = isInside(a);
+			bool inB = isInside(b);
+			if (inA && inB) {
+				// both inside -> keep b
+				out.push_back(b);
 			}
-			return result;
-	};
+			else if (inA && !inB) {
+				// leaving -> push intersection
+				Vector3 ab = b - a;
+				float denom = Vector::Dot(planeNormal, ab);
+				if (fabs(denom) > 1e-8f) {
+					float tParam = Vector::Dot(planeNormal, planePoint - a) / denom;
+					tParam = std::clamp(tParam, 0.0f, 1.0f);
+					out.push_back(a + ab * tParam);
+				}
+			}
+			else if (!inA && inB) {
+				// entering -> push intersection and b
+				Vector3 ab = b - a;
+				float denom = Vector::Dot(planeNormal, ab);
+				if (fabs(denom) > 1e-8f) {
+					float tParam = Vector::Dot(planeNormal, planePoint - a) / denom;
+					tParam = std::clamp(tParam, 0.0f, 1.0f);
+					out.push_back(a + ab * tParam);
+				}
+				out.push_back(b);
+			} // else both out -> nothing
+		}
+		return out;
+		};
 
-	Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
-	Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
+	// choose reference and incident box based on bestAxisType
+	Vector3 refCentre, incCentre;
+	const Vector3* refAxes = nullptr;
+	const Vector3* incAxes = nullptr;
+	Vector3 refHalfSize, incHalfSize;
+	int refFaceAxis = 0;
+	int refFaceSign = 1;
 
-	// 取两个面上点的中点当作接触点（体验上会更稳定一点）
-	Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
+	if (bestAxisType == 0) { // A's axis was reference
+		refCentre = centreA; refAxes = A; refHalfSize = halfSizeA;
+		incCentre = centreB; incAxes = B; incHalfSize = halfSizeB;
+		refFaceAxis = bestAxisIndex; // 0..2
+		refFaceSign = (Vector::Dot(collisionNormal, A[refFaceAxis]) > 0.0f) ? 1 : -1;
+	}
+	else if (bestAxisType == 1) { // B's axis was reference
+		refCentre = centreB; refAxes = B; refHalfSize = halfSizeB;
+		incCentre = centreA; incAxes = A; incHalfSize = halfSizeA;
+		refFaceAxis = bestAxisIndex; // 0..2
+		refFaceSign = (Vector::Dot(collisionNormal, B[refFaceAxis]) > 0.0f) ? 1 : -1;
+	}
+	else {
+		// edge-edge 情形：退回到单点支持点中点（pragmatic fallback）
+		Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
+		Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
+		Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
+		Vector3 localA = contactWorld - centreA;
+		Vector3 localB = contactWorld - centreB;
+		collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+		return true;
+	}
 
-	// localA / localB 是相对各自中心的偏移
-	Vector3 localA = contactWorld - centreA; // 从中心指向接触点的向量（世界空间）
-	Vector3 localB = contactWorld - centreB;
+	// 1) get reference face verts (4) in world space
+	std::vector<Vector3> refVerts = GetFaceVertices(refCentre, refAxes, refHalfSize, refFaceAxis, refFaceSign);
 
-	collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+	// reference face plane
+	Vector3 refFaceCenter = refCentre + refAxes[refFaceAxis] * (refFaceSign * refHalfSize[refFaceAxis]);
+	Vector3 refNormal = refAxes[refFaceAxis] * (float)refFaceSign; // points outward from reference box
+	// ensure refNormal points from reference to incident (same direction as collisionNormal)
+	if (Vector::Dot(refNormal, collisionNormal) < 0.0f) {
+		refNormal = -refNormal;
+	}
+
+	// 2) find incident face on incident box: the face whose normal is most opposite to refNormal
+	int incFaceAxis = 0;
+	int incFaceSign = 1;
+	float bestDot = FLT_MAX;
+	for (int i = 0; i < 3; ++i) {
+		float dPos = Vector::Dot(incAxes[i], refNormal);
+		if (dPos < bestDot) { bestDot = dPos; incFaceAxis = i; incFaceSign = 1; }
+		float dNeg = Vector::Dot(-incAxes[i], refNormal);
+		if (dNeg < bestDot) { bestDot = dNeg; incFaceAxis = i; incFaceSign = -1; }
+	}
+	// get incident face verts
+	std::vector<Vector3> incVerts = GetFaceVertices(incCentre, incAxes, incHalfSize, incFaceAxis, incFaceSign);
+
+	// 3) perform clipping: clip incident polygon by reference face edges
+	std::vector<Vector3> poly = incVerts; // start polygon (world space)
+	for (int i = 0; i < 4; ++i) {
+		Vector3 va = refVerts[i];
+		Vector3 vb = refVerts[(i + 1) % 4];
+		Vector3 edge = vb - va;
+		Vector3 edgeNormal = Vector::Normalise(Vector::Cross(refNormal, edge)); // inward
+		poly = ClipPolygonAgainstPlane(poly, va, edgeNormal);
+		if (poly.empty()) break;
+	}
+
+	// 4) resulting polygon 'poly' are potential contact points (0..n). For each, compute penetration depth onto reference face
+	struct ContactCandidate { Vector3 p; float depth; };
+	std::vector<ContactCandidate> candidates;
+	for (const Vector3& p : poly) {
+		float depth = Vector::Dot(refNormal, refFaceCenter - p); // positive => penetrating
+		if (depth > 1e-4f) {
+			candidates.push_back({ p, depth });
+		}
+	}
+
+	// 5) pick up to 4 deepest contact points
+	if (!candidates.empty()) {
+		std::sort(candidates.begin(), candidates.end(), [](const ContactCandidate& a, const ContactCandidate& b) {
+			return a.depth > b.depth;
+			});
+		int addCount = std::min((size_t)4, candidates.size());
+		for (int i = 0; i < addCount; ++i) {
+			Vector3 contactWorld = candidates[i].p;
+			float contactPenetration = candidates[i].depth;
+			Vector3 localA = contactWorld - centreA;
+			Vector3 localB = contactWorld - centreB;
+			collisionInfo.AddContactPoint(localA, localB, collisionNormal, contactPenetration);
+		}
+	}
+	else {
+		// fallback single contact (rare)
+		Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
+		Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
+		Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
+		Vector3 localA = contactWorld - centreA;
+		Vector3 localB = contactWorld - centreB;
+		collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+	}
 
 	return true;
 }
+
 
 Matrix4 GenerateInverseView(const Camera &c) {
 	float pitch = c.GetPitch();

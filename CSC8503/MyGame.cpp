@@ -98,45 +98,42 @@ void MyGame::UpdateGame(float dt) {
 		world.GetMainCamera().UpdateCamera(dt);
 	}
 
-	// 第三人称跟随镜头
+	// camera follow player
 	if (player) {
 		Vector3 playerPos = player->GetTransform().GetPosition();
 		
-		// 获取当前相机的朝向（由鼠标控制的 Yaw 和 Pitch）
 		float yaw = world.GetMainCamera().GetYaw();
 		float pitch = world.GetMainCamera().GetPitch();
 
-		// 限制 Pitch，防止相机钻地或翻转过头
+		// ristrict pitch angle
 		if (pitch > 30.0f) pitch = 30.0f;
 		if (pitch < -60.0f) pitch = -60.0f;
 
-		// 将欧拉角转换为四元数，计算相机的方向向量
+		// calculate camera direction
 		Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(pitch, yaw, 0);
 		Vector3 cameraBackward = cameraRot * Vector3(0, 0, 1);
-		//Vector3 cameraForward = cameraRot * Vector3(0, 0, -1);
 
-		// 设定相机距离玩家的距离和高度偏移
+		// set desired distance and offset
 		float dist = 15.0f;
-		Vector3 offset = Vector3(0, 5, 0); // 稍微往上看一点
+		Vector3 offset = Vector3(0, 5, 0); // above player's head
 
 		// Avoid Camera Collision
 		float maxDist = 15.0f;
 		float currentDist = maxDist;
-		// 从玩家头部向相机方向发射射线
+		// fire ray from player to camera
 		Vector3 rayOrigin = playerPos + offset;
-		Vector3 rayDir = cameraBackward; // 已经归一化的方向
+		Vector3 rayDir = cameraBackward;
 		Ray ray(rayOrigin, rayDir);
 		RayCollision collision;
-		// 如果射线在 maxDist 距离内碰到了东西（忽略玩家自己）
+		// if ray hits an object
 		if (world.Raycast(ray, collision, true, player)) {
 			if (collision.rayDistance < maxDist) {
-				// 将距离设置为碰撞距离减去一点缓冲(0.5)，防止相机穿插在墙里面
+				// make sure camera is not in the wall
 				currentDist = collision.rayDistance - 0.5f;
-				if (currentDist < 0.5f) currentDist = 0.5f; // 最小距离限制
+				if (currentDist < 0.5f) currentDist = 0.5f;
 			}
 		}
 
-		// 计算最终位置
 		Vector3 cameraPos = rayOrigin + (cameraBackward * currentDist);
 		world.GetMainCamera().SetPosition(cameraPos);
 	}
@@ -154,44 +151,55 @@ void MyGame::UpdateGame(float dt) {
 			if (player->GetHeldItem() != nullptr) {
 				if (player->GetHeldItem()->GetName() == "FragilePackage") {
 					player->ThrowHeldItem(Vector3(0, 0, 0));
+					score = 0; // reset player score
 				}
 			}
 			if (rival->GetHeldItem() != nullptr) {
 				if (rival->GetHeldItem()->GetName() == "FragilePackage") {
 					rival->ThrowHeldItem(Vector3(0, 0, 0));
+					rival->SetScore(0); // reset rival score
 				}
 			}
-			packageObject->GetTransform().SetPosition(Vector3(0, -9999, 0)); // if destroyed, move it underground
 			// reset function is in FragileGameObject.cpp
 		}
 	}
 
+	// Update player and rival score
+	if (player) {
+		if (player->GetHeldItem() != nullptr) {
+			if (player->GetHeldItem()->GetName() == "FragilePackage") {
+				score = packageObject->GetCollectionCount(); // reset player score
+			}
+		}
+		if (rival->GetHeldItem() != nullptr) {
+			if (rival->GetHeldItem()->GetName() == "FragilePackage") {
+				rival->SetScore(packageObject->GetCollectionCount()); // reset player score
+			}
+		}
+	}
+	
 	// puzzle door and pressure plate logic
 	if (puzzleDoor && pressurePlate) {
 		bool isTriggered = false;
 		Vector3 platePos = pressurePlate->GetTransform().GetPosition();
-		// 压力板区域大小 (根据 InitCourierLevel 中设置的大小适当放宽)
-		// 压力板尺寸是 5x0.5x5 (HalfDims), 我们在 Y 轴上放宽一点以便检测站在上面的物体
 		Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
 
-		// 简单的 AABB 包含检测 lambda
 		auto CheckTrigger = [&](GameObject* obj) {
 			if (!obj) return false;
 			Vector3 pos = obj->GetTransform().GetPosition();
-			// 检查 obj 是否在压力板的 AABB 范围内
+			// check AABB
 			return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
 				pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
 				pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
 		};
 
-		// 只要玩家或者包裹在上面，就算触发
+		// if player or cubeStone is on the pressure plate
 		if (CheckTrigger(player) || CheckTrigger(cubeStone)) {
 			isTriggered = true;
 		}
 
-		// --- 门的动作 ---
+		// door movement
 		Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
-		// 门初始在 Y=10 (地面上), 打开时移动到 Y=-10 (沉入地下)
 		float targetY = isTriggered ? -10.0f : 10.0f;
 		float doorSpeed = 20.0f;
 
@@ -208,18 +216,24 @@ void MyGame::UpdateGame(float dt) {
 		}
 
 		if (isTriggered) {
-			pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // 激活变绿
+			pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
 		}
 		else {
-			pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // 默认黄色
+			pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
 		}
 	}
 
 	// Coin Collection, iterate in reverse order
 	for (int i = coins.size() - 1; i >= 0; --i) {
 		GameObject* c = coins[i];
-		if (!c->IsActive()) continue;
 
+		// make coin rotate
+		float rotationSpeed = 90.0f;
+		Quaternion rotation = Quaternion::AxisAngleToQuaterion(Vector3(0, 1, 0), rotationSpeed * dt);
+		Quaternion currentOri = c->GetTransform().GetOrientation();
+		c->GetTransform().SetOrientation(rotation* currentOri);
+
+		if (!c->IsActive()) continue;
 		// calculate distance to player
 		float player_dist = Vector::Length((player->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
 		float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
@@ -229,14 +243,14 @@ void MyGame::UpdateGame(float dt) {
 		if (playerHeld) {
 			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
 				world.RemoveGameObject(c, true); // remove coin from world
-				score++;
+				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
 			}
 		}
 		if (rivalHeld) {
 			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
 				world.RemoveGameObject(c, true); // remove coin from world
-				rival->AddScore(1); // rival score +
+				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
 			}
 		}
@@ -273,15 +287,15 @@ void MyGame::UpdateGame(float dt) {
 		}
 	}
 
-	// 游戏进行中的 HUD
+	// Display score
 	std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
-	// 根据是否收集满显示不同颜色
+	// score color change if reached winning score
 	Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
 	Debug::Print(scoreText, Vector2(75, 10), scoreColor);
 	std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
 	Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
-	//----------------------------------------------------------------------------------
-	
+
+	//---------------------------------~o( > . <)o~---------------------------------//
 	// player object update
 	if (!inSelectionMode && player) {
 		player->Update(dt);
@@ -348,7 +362,8 @@ void MyGame::InitCamera() {
 void MyGame::InitWorld() {
 	world.ClearAndErase();
 	physics.Clear();
-	// 好像无效了？
+	coins.clear();
+
 	score = 0;
 	isGameOver = false;
 	isGameWon = false;
@@ -402,7 +417,7 @@ GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, floa
 GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, float inverseMass, std::string name) {
 	GameObject* cube = new GameObject(name);
 
-	OBBVolume* volume = new OBBVolume(dimensions);
+	AABBVolume* volume = new AABBVolume(dimensions);
 	cube->SetBoundingVolume(volume);
 
 	cube->GetTransform()
@@ -455,7 +470,7 @@ StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 
 	StateGameObject* character = new StateGameObject("enemy");
 
-	OBBVolume* volume = new OBBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
+	AABBVolume* volume = new AABBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
 	character->SetBoundingVolume(volume);
 
 	character->GetTransform()

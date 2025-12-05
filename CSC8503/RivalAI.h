@@ -22,7 +22,7 @@ namespace NCL::CSC8503 {
         void SetPackageSpawn(Vector3 pos) { packageSpawnPos = pos; }
 
 		// AI add/get score
-        void AddScore(int amount) { currentScore += amount; }
+        void SetScore(int amount) { currentScore = amount; }
         int  GetScore() const { return currentScore; }
 
     protected:

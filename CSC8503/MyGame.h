@@ -70,6 +70,7 @@ namespace NCL {
 			
 			// About coin and score
 			int score = 0;
+			int scoreInPackage = 0; // coins collected while carrying package
 			const int winningScore = 3; // score needed to win
 			std::vector<GameObject*> coins; // coin list
 			// win or lose

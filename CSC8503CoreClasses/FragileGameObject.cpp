@@ -18,6 +18,7 @@ FragileGameObject::FragileGameObject(const std::string& name, const Vector3& pos
     health = maxHealth;
     isBroken = false;
 	isAttached = false;
+    collectionCount = 0;
 
 	// set physics volume
     SphereVolume* volume = new SphereVolume(1.0f);
@@ -45,7 +46,7 @@ FragileGameObject::~FragileGameObject() {
 void FragileGameObject::Update(float dt) {
     if (isBroken) {
         timer -= dt;
-
+        GetTransform().SetPosition(Vector3(0, -9999, 0));
         Debug::Print("Package respawning in: " + std::to_string((int)timer + 1), Vector2(40, 55), Vector4(1, 0, 0, 1));
 
         if (timer <= 0.0f) {
@@ -104,17 +105,15 @@ void FragileGameObject::Reset() {
 	// reset position and orientation
     GetTransform().SetPosition(initialPosition);
     GetTransform().SetOrientation(Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
-	// reset colour
+	// colour
     if (GetRenderObject()) {
         GetRenderObject()->SetColour(Vector4(0, 0, 1, 1));
     }
-
-	// reset physics
+	// physics
     if (GetPhysicsObject()) {
         GetPhysicsObject()->ClearForces();
         GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
         GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
         GetPhysicsObject()->SetInverseMass(1.0f);
-        //GetPhysicsObject()->WakeUp();
     }
 }

@@ -22,6 +22,8 @@ namespace NCL {
 
 			void SetAttached(bool attached) { isAttached = attached; }
             bool GetAttached() const { return isAttached; }
+			int GetCollectionCount() const { return collectionCount; }
+			void IncreaseCollectionCount() { collectionCount++; }
 
         protected:
             float health;
@@ -29,6 +31,7 @@ namespace NCL {
             bool isBroken;
 			bool isAttached;
             float timer = 0.0f;
+			int collectionCount;
 			Vector3 initialPosition;
         };
     }
