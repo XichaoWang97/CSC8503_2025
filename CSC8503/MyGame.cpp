@@ -359,11 +359,11 @@ void MyGame::InitWorld() {
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 	GameObject* floor = new GameObject("floor");
 
-	Vector3 floorSize = Vector3(200, 2, 200);
+	Vector3 floorSize = Vector3(400, 4, 400);
 	AABBVolume* volume = new AABBVolume(floorSize);
 	floor->SetBoundingVolume(volume);
 	floor->GetTransform()
-		.SetScale(floorSize * 2.0f)
+		.SetScale(floorSize)
 		.SetPosition(position);
 
 	floor->SetRenderObject(new RenderObject(floor->GetTransform(), cubeMesh, checkerMaterial));
@@ -607,8 +607,8 @@ void MyGame::InitCourierLevel() {
 	rival->SetFragilePackage(packageObject);
 
 	// Add Sphere and CubeStone
-	AddSphereToWorld(Vector3(-55, 3, 60), 2.0f, 1.0f); // test sphere above package
-	//cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
+	AddSphereToWorld(Vector3(-55, 5, 60), 2.0f, 1.0f); // test sphere above package
+	cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
 	// Add coins at various locations, mass = 0 for floating
 	AddCoinToWorld(Vector3(-50, 5, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
