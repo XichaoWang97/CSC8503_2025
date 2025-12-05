@@ -184,7 +184,18 @@ bool CollisionDetection::ObjectIntersection(GameObject* a, GameObject* b, Collis
 		collisionInfo.b = a;
 		return OBBSphereIntersection((OBBVolume&)*volB, transformB, (SphereVolume&)*volA, transformA, collisionInfo);
 	}
-
+	// New: AABB vs OBB pairs
+	// treat AABB as a special case of OBB with no rotation
+	if (volA->type == VolumeType::AABB && volB->type == VolumeType::OBB) {
+		OBBVolume tempOBB(((AABBVolume*)volA)->GetHalfDimensions());
+		return OBBIntersection(tempOBB, transformA, (OBBVolume&)*volB, transformB, collisionInfo);
+	}
+	if (volA->type == VolumeType::OBB && volB->type == VolumeType::AABB) {
+		OBBVolume tempOBB(((AABBVolume*)volB)->GetHalfDimensions());
+		collisionInfo.a = b;
+		collisionInfo.b = a;
+		return OBBIntersection(tempOBB, transformB, (OBBVolume&)*volA, transformA, collisionInfo);
+	}
 	//Capsule vs other interactions
 	if (volA->type == VolumeType::Capsule && volB->type == VolumeType::Sphere) {
 		return SphereCapsuleIntersection((CapsuleVolume&)*volA, transformA, (SphereVolume&)*volB, transformB, collisionInfo);
@@ -529,11 +540,8 @@ bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transfo
 	Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
 
 	// localA / localB 是相对各自中心的偏移
-	Matrix3 invRotA = NCL::Maths::Matrix::Transpose(rotA);
-	Matrix3 invRotB = NCL::Maths::Matrix::Transpose(rotB);
-
-	Vector3 localA = invRotA * (contactWorld - centreA);
-	Vector3 localB = invRotB * (contactWorld - centreB);
+	Vector3 localA = contactWorld - centreA; // 从中心指向接触点的向量（世界空间）
+	Vector3 localB = contactWorld - centreB;
 
 	collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
 

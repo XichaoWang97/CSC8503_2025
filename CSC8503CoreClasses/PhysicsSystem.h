@@ -25,6 +25,8 @@ namespace NCL {
 			}
 
 			void SetGravity(const Vector3& g);
+
+			void DrawDebugData();
 		protected:
 			void BasicCollisionDetection();
 			void BroadPhase();

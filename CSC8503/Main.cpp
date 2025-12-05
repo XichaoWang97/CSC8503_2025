@@ -375,13 +375,13 @@ int main() {
 
 	MyGame* g = new MyGame(*world, *renderer, *physics);
 	NetworkedGame* ng = new NetworkedGame(*world, *renderer, *physics);
-	// Init PushdownMachine -- main menu state
-	PushdownMachine machine(new MainMenuState(g, ng, world, physics));
+	PushdownMachine machine(new MainMenuState(g, ng, world, physics)); // Init PushdownMachine -- main menu state
 
+	//TutorialGame* g = new TutorialGame(*world, *renderer, *physics); // Testing tutorial game
 	w->GetTimer().GetTimeDeltaSeconds();
 
 	// main loop
-	while (w->UpdateWindow() && !Window::GetKeyboard()->KeyDown(KeyCodes::END)) { // 用 END 键或者 ESC (如果在菜单里) 退出
+	while (w->UpdateWindow() && !Window::GetKeyboard()->KeyDown(KeyCodes::END)) {
 		float dt = w->GetTimer().GetTimeDeltaSeconds();
 		if (dt > 0.1f) {
 			std::cout << "Skipping large time delta" << std::endl;
@@ -400,18 +400,19 @@ int main() {
 
 		w->SetTitle("Gametech frame time:" + std::to_string(1000.0f * dt));
 
-		// --- 任务 2.1: 更新状态机 ---
+		// Update StateMachine
 		if (!machine.Update(dt)) {
 			break;
 		}
 
-		// 物理和世界的 Update 现在移到了 Mygame 内部
+		// world and physics are moved to MyGame, if you want to test TutorialGame, please uncomment them
+		//world->UpdateWorld(dt);
+		//physics->Update(dt);
 		renderer->Update(dt);
 		renderer->Render();
 
 		Debug::UpdateRenderables(dt);
 	}
-	//TestNetworking();
-	//system("pause");
+
 	Window::DestroyGameWindow();
 }

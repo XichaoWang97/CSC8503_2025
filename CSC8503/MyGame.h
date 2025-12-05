@@ -75,7 +75,7 @@ namespace NCL {
 			// win or lose
 			bool isGameOver = false;
 			bool isGameWon = false;
-			// 用于存储导航网格
+			// for navigation and pathfinding
 			NavigationGrid* navGrid = nullptr;
 			
 
@@ -114,13 +114,13 @@ namespace NCL {
 
 			
 
-			// --- 抓取系统核心结构 ---
-			struct GrappleInfo {
-				GameObject* holder;       // 谁拿着
-				GameObject* item;         // 拿着什么
-				PositionConstraint* constraint; // 那个物理约束
+			// constraints for grappling
+			/*struct GrappleInfo {
+				GameObject* holder;       // who is holding
+				GameObject* item;         // what is being held
+				PositionConstraint* constraint; // constraint between them
 			};
-			std::vector<GrappleInfo> activeGrapples; // 当前所有的抓取关系
+			std::vector<GrappleInfo> activeGrapples; // active grapples in the world*/
 		};
 	}
 }

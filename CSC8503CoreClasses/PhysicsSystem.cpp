@@ -145,6 +145,11 @@ void PhysicsSystem::Update(float dt)
 			std::cout << "Raising iteration count due to short physics time...(now " << realHZ << ")\n";
 		}
 	}
+
+	// Debug Drawing volume
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::NUM2)) {
+		DrawDebugData();
+	}
 }
 
 /*
@@ -245,14 +250,13 @@ void PhysicsSystem::ImpulseResolveCollision(GameObject& a, GameObject& b, Collis
 	}
 	
 	// Separate them out using projection
-	transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA->GetInverseMass() / totalMass)));
-	transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB->GetInverseMass() / totalMass)));
-
+	//transformA.SetPosition(transformA.GetPosition() - (p.normal * p.penetration * (physA->GetInverseMass() / totalMass)));
+	//transformB.SetPosition(transformB.GetPosition() + (p.normal * p.penetration * (physB->GetInverseMass() / totalMass)));
 
 	float penetrationSlop = 0.002f;
 	// 2. 引入 Bias (位置修正系数)：范围 0.0 ~ 1.0
 	// 0.1 表示每帧只修 10% 的穿透（很软，像泥巴, 0.8 表示每帧修 80% 的穿透（硬，但不会太弹）
-	float positionCorrectionBias = 0.4f;
+	float positionCorrectionBias = 0.6f;
 
 	if (p.penetration > penetrationSlop) {
 		// 计算这一帧需要修正的距离：(穿透深度 - 允许误差) * 缓动系数
@@ -487,4 +491,70 @@ void PhysicsSystem::UpdateConstraints(float dt)
 	for (auto i = first; i != last; ++i) {
 		(*i)->UpdateConstraint(dt);
 	}
+}
+
+// NEW:----------------------Draw Debug Data-----------------------
+// Draw 12 edges of AABB or OBB box
+void DrawBoxWireframe(const Vector3& halfSize, const Vector3& pos, const Quaternion& orientation, const Vector4& color) {
+	// get 8 corners of the box
+	Vector3 corners[8];
+	Vector3 axisX = orientation * Vector3(1, 0, 0) * halfSize.x;
+	Vector3 axisY = orientation * Vector3(0, 1, 0) * halfSize.y;
+	Vector3 axisZ = orientation * Vector3(0, 0, 1) * halfSize.z;
+
+	corners[0] = pos + axisX + axisY + axisZ;
+	corners[1] = pos + axisX + axisY - axisZ;
+	corners[2] = pos + axisX - axisY + axisZ;
+	corners[3] = pos + axisX - axisY - axisZ;
+	corners[4] = pos - axisX + axisY + axisZ;
+	corners[5] = pos - axisX + axisY - axisZ;
+	corners[6] = pos - axisX - axisY + axisZ;
+	corners[7] = pos - axisX - axisY - axisZ;
+
+	// draw edges
+	// Top face
+	Debug::DrawLine(corners[0], corners[1], color);
+	Debug::DrawLine(corners[1], corners[5], color);
+	Debug::DrawLine(corners[5], corners[4], color);
+	Debug::DrawLine(corners[4], corners[0], color);
+	// Bottom face
+	Debug::DrawLine(corners[2], corners[3], color);
+	Debug::DrawLine(corners[3], corners[7], color);
+	Debug::DrawLine(corners[7], corners[6], color);
+	Debug::DrawLine(corners[6], corners[2], color);
+	// Connecting pillars
+	Debug::DrawLine(corners[0], corners[2], color);
+	Debug::DrawLine(corners[1], corners[3], color);
+	Debug::DrawLine(corners[4], corners[6], color);
+	Debug::DrawLine(corners[5], corners[7], color);
+}
+
+// Draw all collision volumes in the world
+void PhysicsSystem::DrawDebugData() {
+	gameWorld.OperateOnContents(
+		[](GameObject* g) {
+			const CollisionVolume* vol = g->GetBoundingVolume();
+			if (!vol) return;
+
+			const Transform& transform = g->GetTransform();
+			Vector3 pos = transform.GetPosition();
+
+			// Volume(OBB/AABB/Sphere)
+			if (vol->type == VolumeType::AABB) {
+				const AABBVolume* aabb = (const AABBVolume*)vol;
+				DrawBoxWireframe(aabb->GetHalfDimensions(), pos, Quaternion(), Debug::RED);
+			}
+			else if (vol->type == VolumeType::OBB) {
+				const OBBVolume* obb = (const OBBVolume*)vol;
+				DrawBoxWireframe(obb->GetHalfDimensions(), pos, transform.GetOrientation(), Debug::RED);
+			}
+			else if (vol->type == VolumeType::Sphere) {
+				const SphereVolume* sphere = (const SphereVolume*)vol;
+				float r = sphere->GetRadius();
+				Debug::DrawLine(pos - Vector3(r, 0, 0), pos + Vector3(r, 0, 0), Debug::RED);
+				Debug::DrawLine(pos - Vector3(0, r, 0), pos + Vector3(0, r, 0), Debug::RED);
+				Debug::DrawLine(pos - Vector3(0, 0, r), pos + Vector3(0, 0, r), Debug::RED);
+			}
+		}
+	);
 }

@@ -56,7 +56,7 @@ namespace NCL::CSC8503 {
 		GameObject* currentTarget;  // objective target
 
 		Vector3 packageSpawnPos;    // package camp position(pakcage rebirth point)
-
+		BehaviourNode* rootNode;
         NavigationPath currentPath;
         std::vector<Vector3> pathPoints;
 

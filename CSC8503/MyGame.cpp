@@ -391,7 +391,7 @@ GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, floa
 GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, float inverseMass, std::string name) {
 	GameObject* cube = new GameObject(name);
 
-	AABBVolume* volume = new AABBVolume(dimensions);
+	OBBVolume* volume = new OBBVolume(dimensions);
 	cube->SetBoundingVolume(volume);
 
 	cube->GetTransform()
@@ -413,7 +413,7 @@ GameObject* MyGame::AddCoinToWorld(const Vector3& position, Vector3 dimensions, 
 	GameObject* coin = new GameObject("Coin");
 
 	// set bounding volume
-	AABBVolume* volume = new AABBVolume(dimensions);
+	OBBVolume* volume = new OBBVolume(dimensions);
 	coin->SetBoundingVolume(volume);
 
 	coin->GetTransform()
@@ -440,11 +440,11 @@ GameObject* MyGame::AddCoinToWorld(const Vector3& position, Vector3 dimensions, 
 
 StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	float meshSize = 3.0f;
-	float inverseMass = 0.5f;
+	float inverseMass = 0.0f;
 
 	StateGameObject* character = new StateGameObject("enemy");
 
-	AABBVolume* volume = new AABBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
+	OBBVolume* volume = new OBBVolume(Vector3(0.3f, 0.9f, 0.3f) * meshSize);
 	character->SetBoundingVolume(volume);
 
 	character->GetTransform()
@@ -597,7 +597,7 @@ void MyGame::InitCourierLevel() {
 
 	// Add Sphere and CubeStone
 	AddSphereToWorld(Vector3(-55, 3, 60), 2.0f, 1.0f); // test sphere above package
-	cubeStone = AddCubeToWorld(Vector3(-45, 3, 60), Vector3(1, 1, 1), 1.0f, "CubeStone"); // test cubeStone, interact with pressurePlate
+	cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
 	// Add coins at various locations, mass = 0 for floating
 	AddCoinToWorld(Vector3(-50, 5, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
@@ -605,7 +605,7 @@ void MyGame::InitCourierLevel() {
 	AddCoinToWorld(Vector3(10, 5, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
 
 	// Build terrain and obstacles
-	AddFloorToWorld(Vector3(0, 0, 0)); // floor
+	AddFloorToWorld(Vector3(0, -1, 0)); // floor
 
 	// walls
 	float wallHeight = 20.0f;
