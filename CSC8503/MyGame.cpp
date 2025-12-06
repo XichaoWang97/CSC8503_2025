@@ -349,6 +349,9 @@ void MyGame::UpdateGame(float dt) {
 			o->Update(dt);
 		}
 	);
+	// Update physics and world
+	physics.Update(dt);
+	world.UpdateWorld(dt);
 }
 
 void MyGame::InitCamera() {

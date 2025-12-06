@@ -30,10 +30,17 @@ namespace NCL::CSC8503 {
 
 	struct ClientPacket : public GamePacket {
 		int		lastID;
-		char	buttonstates[8];
-
+		char	buttonstates[8]; // 0: Space(Jump), 1: MouseLeft(Shoot), etc.
+		int     axis[2]; // [0]: Forward/Back (W/S), [1]: Left/Right (A/D)
+		float   yaw; // for camera control
 		ClientPacket() {
-			size = sizeof(ClientPacket);
+			type = BasicNetworkMessages::Client_Update; // Client_Update is in the enum of NetworkBase.h
+			size = sizeof(ClientPacket) - sizeof(GamePacket);
+			lastID = 0;
+			axis[0] = 0;
+			axis[1] = 0;
+			yaw = 0.0f;
+			memset(buttonstates, 0, 8);
 		}
 	};
 
@@ -68,6 +75,7 @@ namespace NCL::CSC8503 {
 		virtual bool WritePacket(GamePacket** p, bool deltaFrame, int stateID);
 
 		void UpdateStateHistory(int minID);
+		int GetNetworkID() { return networkID; }
 
 	protected:
 

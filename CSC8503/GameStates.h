@@ -8,9 +8,6 @@
 #include "GameWorld.h"
 
 #include "NetworkedGame.h"
-#include "GameServer.h"
-#include "GameClient.h"
-
 
 namespace NCL {
 	namespace CSC8503 {
@@ -87,9 +84,7 @@ namespace NCL {
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				game->UpdateGame(dt);
-				physics->Update(dt);
-				world->UpdateWorld(dt);
+				game->UpdateGame(dt); // MyGame 的 Update 负责物理和逻辑
 
 				// check game over conditions
 				if (game->IsGameOver()) {
@@ -105,7 +100,6 @@ namespace NCL {
 
 				Debug::Print("Press ESC to Pause", Vector2(5, 5), Debug::YELLOW);
 				Debug::Print("Press 1 to Return to Main Menu", Vector2(5, 8), Debug::YELLOW);
-				Debug::Print("Press 2 to Draw Bounding Volume", Vector2(5, 11), Debug::YELLOW); // Draw function is in PhysicsSystem.cpp
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					*newState = new PauseState(game);
@@ -135,20 +129,21 @@ namespace NCL {
 		// Networked game state
 		class NetworkedGameState : public PushdownState {
 		public:
-			NetworkedGameState(NetworkedGame* g, GameWorld* w, PhysicsSystem* p)
-				: netGame(g), world(w), physics(p) {
+			NetworkedGameState(NetworkedGame* g)
+				: netGame(g) {
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				// netGame->UpdateGame(dt); // 网络游戏逻辑由其内部驱动
+				// 【关键修改】必须调用 netGame 的 UpdateGame，因为网络收发包逻辑都在这里面
+				// 且 NetworkedGame::UpdateGame 内部会调用 physics->Update，所以不要在这里重复调用
+				netGame->UpdateGame(dt);
 
-				physics->Update(dt);
-				world->UpdateWorld(dt);
-
+				Debug::Print("Multiplayer Mode", Vector2(5, 5), Debug::GREEN);
 				Debug::Print("Press ESC to Disconnect", Vector2(5, 10), Debug::WHITE);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
-					return PushdownResult::Pop; // Go back to main menu
+					// 可以在这里添加断开连接的逻辑，例如 netGame->Disconnect();
+					return PushdownResult::Pop;
 				}
 				return PushdownResult::NoChange;
 			}
@@ -160,30 +155,30 @@ namespace NCL {
 
 		protected:
 			NetworkedGame* netGame;
-			GameWorld* world;
-			PhysicsSystem* physics;
 		};
 
 		// Client game state
 		class ClientGameState : public PushdownState {
 		public:
-			ClientGameState(NetworkedGame* g, GameWorld* w, PhysicsSystem* p)
-				: netGame(g), world(w), physics(p) {
-				client = new GameClient();
+			ClientGameState(NetworkedGame* g)
+				: netGame(g) {
+				// 不在这里创建 GameClient，而是让 NetworkedGame 去初始化
+				// 暂时注释掉这里的自动连接，改为在 Update 里按键触发，或者直接在这里调用
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				Debug::Print("Connecting to server...", Vector2(30, 40), Debug::WHITE);
-				Debug::Print("127.0.0.1 (Hardcoded)", Vector2(30, 45), Debug::WHITE);
+				Debug::Print("Waiting to Connect...", Vector2(30, 40), Debug::WHITE);
+				Debug::Print("Press SPACE to Connect Localhost", Vector2(30, 45), Debug::WHITE);
+				Debug::Print("Press ESC to Return", Vector2(30, 50), Debug::WHITE);
 
-				if (client->Connect(127, 0, 0, 1, 1234)) {
-					// connected successfully
-					*newState = new NetworkedGameState(netGame, world, physics);
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
+					// 【关键修改】调用 NetworkedGame 的方法来启动客户端
+					netGame->StartAsClient(127, 0, 0, 1);
+
+					// 进入游戏循环状态
+					*newState = new NetworkedGameState(netGame);
 					return PushdownResult::Push;
 				}
-
-				Debug::Print("Failed to connect!", Vector2(30, 50), Debug::RED);
-				Debug::Print("Press ESC to return", Vector2(30, 55), Debug::WHITE);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					return PushdownResult::Pop;
@@ -192,28 +187,27 @@ namespace NCL {
 			}
 		protected:
 			NetworkedGame* netGame;
-			GameWorld* world;
-			PhysicsSystem* physics;
-			GameClient* client;
 		};
 
 		// Host game state(server)
 		class HostGameState : public PushdownState {
 		public:
-			HostGameState(NetworkedGame* g, GameWorld* w, PhysicsSystem* p)
-				: netGame(g), world(w), physics(p) {
-				server = new GameServer(1234, 4);
+			HostGameState(NetworkedGame* g)
+				: netGame(g) {
+				// 同样，不要在这里 new GameServer
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				Debug::Print("Hosting on port 1234...", Vector2(30, 40), Debug::WHITE);
-				Debug::Print("Waiting for players...", Vector2(30, 45), Debug::WHITE);
-				Debug::Print("Press 1 to Start Game", Vector2(30, 55), Debug::WHITE);
+				Debug::Print("Server Setup", Vector2(30, 40), Debug::WHITE);
+				Debug::Print("Press SPACE to Start Server", Vector2(30, 55), Debug::WHITE);
 				Debug::Print("Press ESC to Cancel", Vector2(30, 60), Debug::WHITE);
 
-				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM1)) {
-					// start the game
-					*newState = new NetworkedGameState(netGame, world, physics);
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
+					// 【关键修改】调用 NetworkedGame 的方法来启动服务器
+					netGame->StartAsServer();
+
+					// 进入游戏循环状态
+					*newState = new NetworkedGameState(netGame);
 					return PushdownResult::Push;
 				}
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
@@ -223,9 +217,6 @@ namespace NCL {
 			}
 		protected:
 			NetworkedGame* netGame;
-			GameWorld* world;
-			PhysicsSystem* physics;
-			GameServer* server;
 		};
 
 		// Main menu state
@@ -237,7 +228,7 @@ namespace NCL {
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
 				Debug::Print("CSC8503 Coursework", Vector2(35, 20), Debug::CYAN);
-				Debug::Print("1. Start Single Player (Part A)", Vector2(30, 40), Debug::WHITE);
+				Debug::Print("1. Start Single Player", Vector2(30, 40), Debug::WHITE);
 				Debug::Print("2. Host Network Game (Server)", Vector2(30, 45), Debug::WHITE);
 				Debug::Print("3. Join Network Game (Client)", Vector2(30, 50), Debug::WHITE);
 				Debug::Print("Esc. Exit Game", Vector2(30, 60), Debug::WHITE);
@@ -247,11 +238,11 @@ namespace NCL {
 					return PushdownResult::Push;
 				}
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM2)) {
-					*newState = new HostGameState(netGame, world, physics);
+					*newState = new HostGameState(netGame);
 					return PushdownResult::Push;
 				}
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM3)) {
-					*newState = new ClientGameState(netGame, world, physics);
+					*newState = new ClientGameState(netGame);
 					return PushdownResult::Push;
 				}
 
