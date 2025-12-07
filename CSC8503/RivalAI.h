@@ -8,6 +8,7 @@
 #include "NavigationGrid.h"
 #include "NavigationPath.h"
 #include "GameWorld.h"
+#include "Player.h"
 using namespace NCL;
 
 namespace NCL::CSC8503 {
@@ -18,7 +19,7 @@ namespace NCL::CSC8503 {
 
         void Update(float dt) override;
 
-        void SetPlayer(GameCharacter* p) { player = p; }
+        void SetPlayerList(std::vector<Player*>* players) { allPlayers = players; }
         void SetPackageSpawn(Vector3 pos) { packageSpawnPos = pos; }
 
 		// AI add/get score
@@ -41,7 +42,7 @@ namespace NCL::CSC8503 {
         BehaviourState IsHoldingStone(float dt);    // 条件：我拿着石头吗？
         BehaviourState DoesPlayerHavePackage(float dt); // 条件：玩家拿着包裹吗？
 
-        BehaviourState RunAwayFromPlayer(float dt); // 动作：逃跑
+        BehaviourState FindWinZone(float dt);       // 动作：去终点
         BehaviourState GetClosestStone(float dt);   // 动作：找石头并设定目标
         BehaviourState GetClosestCoin(float dt);    // 动作：找金币并设定目标
         BehaviourState GetPackageOrCamp(float dt);  // 动作：找包裹或蹲点
@@ -49,10 +50,13 @@ namespace NCL::CSC8503 {
         BehaviourState MoveToTarget(float dt);      // 通用动作：移动到 currentTarget
         BehaviourState AttemptGrab(float dt);       // 通用动作：尝试抓取 currentTarget
         BehaviourState ThrowAtPlayer(float dt);     // 通用动作：向玩家扔石头
+		Player* FindPlayerHoldingPackage();         // find player who holds package
+        
 
+        GameObject* exitPoint; // 【新增】存储撤离点坐标
         GameWorld* gameWorld;
         NavigationGrid* grid;
-        GameCharacter* player;
+        std::vector<Player*>* allPlayers;
 		GameObject* currentTarget;  // objective target
 
 		Vector3 packageSpawnPos;    // package camp position(pakcage rebirth point)

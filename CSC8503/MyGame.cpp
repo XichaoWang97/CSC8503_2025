@@ -195,15 +195,12 @@ void MyGame::InitDefaultPlayer() {
 	Player* p = AddPlayerToWorld(pos, 1.0f);
 
 	players.push_back(p); // add to players list
-
-	// set local player ID
-	localPlayerID = 0;
+	localPlayerID = 0; // set local player ID
 
 	// set player reference as target for rival and goose
-	if (rival) rival->SetPlayer(p);
-	if (goose) goose->SetPlayer(p);
-	if (patrolEnemy) patrolEnemy->SetTarget(p);
-	p->SetFragilePackage(packageObject);
+	if (rival) rival->SetPlayerList(&players);
+	if (goose) goose->SetPlayerList(&players);
+	if (patrolEnemy) patrolEnemy->SetPlayerList(&players);
 }
 
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
@@ -303,7 +300,7 @@ StateGameObject* MyGame::AddPatrolEnemyToWorld(const Vector3& position, const Ve
 	// Patroling enemy AI, if player is close, chase
 	// If reaches player, transport player back to start point
 	float meshSize = 3.0f;
-	float inverseMass = 0.0f;
+	float inverseMass = 0.5f;
 
 	StateGameObject* character = new StateGameObject("enemy");
 
@@ -359,7 +356,7 @@ Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radi
 	physicsObj->SetElasticity(0.0f); // no bounciness
 
 	newplayer->SetPhysicsObject(physicsObj);
-	
+	newplayer->SetFragilePackage(packageObject); // set package
 	world.AddGameObject(newplayer);
 
 	return newplayer;
@@ -559,8 +556,8 @@ void MyGame::GetCoinLogic(Player* player, float dt) {
 
 void MyGame::PackageLogic(Player* player, float dt) {
 	if (!player || !packageObject) return;
-	
-	if (player->GetHeldItem() != nullptr && player->GetHeldItem()->GetName() == "FragilePackage") {
+
+	if (player->GetHeldItem() && player->GetHeldItem()->GetName() == "FragilePackage") {
 		score = packageObject->GetCollectionCount(); // reset player score
 		if(packageObject->IsBroken()) {
 			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
@@ -642,6 +639,8 @@ void MyGame::InitCourierLevel() {
 	}
 	rival = AddRivalAIToWorld(Vector3(-60, 5, 50), 1.0f); // red color
 	rival->SetNetworkObject(new NetworkObject(*rival, 10)); //give rival a network object for syncing
+
+
 	goose = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
 	goose->SetNetworkObject(new NetworkObject(*goose, 11));
 
@@ -681,8 +680,8 @@ void MyGame::InitCourierLevel() {
 	AddCubeToWorld(Vector3(40, 5, 20), Vector3(10, 5, 10), 0.0f);
 
 	// Destination zone, green area, now it is static
-	Vector3 targetPos = Vector3(60, 2, -60);
-	targetZone = AddCubeToWorld(targetPos, Vector3(10, 1, 10), 0.0f);
+	Vector3 targetPos = Vector3(60, 1, -60);
+	targetZone = AddCubeToWorld(targetPos, Vector3(10, 0.5f, 10), 0.0f);
 	if (targetZone && targetZone->GetRenderObject()) {
 		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // set green with some transparency
 	}

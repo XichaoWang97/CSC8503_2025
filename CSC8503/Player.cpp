@@ -15,7 +15,9 @@ void Player::Update(float dt) {
     if (actionCooldown > 0.0f) {
         actionCooldown -= dt;
     }
-	PlayerControl(dt);
+    if (!ignoreInput) {
+        PlayerControl(dt);
+    }
     DrawGrappleLine();
 }
 

@@ -49,6 +49,7 @@ StateGameObject::~StateGameObject() {
 
 void StateGameObject::Update(float dt) {
 	stateMachine->Update(dt);
+	playerTarget = GetClosestPlayer();
 }
 
 // --- 任务 1.3 修改: 使用物理碰撞回调 ---
@@ -136,14 +137,12 @@ bool StateGameObject::CanSeeTarget() {
 		return false;
 	}
 
-	// 射线检测
-	// 从 AI 中心稍微偏上一点的位置发射，指向玩家中心
-	// 避免射线直接打到地面
-	Vector3 rayOrigin = aiPos + Vector3(0, 2.0f, 0);
-	Vector3 targetPoint = playerPos + Vector3(0, 1.0f, 0); // 瞄准玩家胸部
+	// 射线检测,从 AI 中心稍微偏上一点的位置发射，指向玩家中心
+	Vector3 rayOrigin = aiPos;
+	Vector3 targetPoint = playerPos;
 
 	Vector3 rayDir = targetPoint - rayOrigin;
-	rayDir = Vector::Normalise(rayDir); // Ray 需要归一化的方向
+	rayDir = Vector::Normalise(rayDir);
 
 	Ray ray(rayOrigin, rayDir);
 	RayCollision collision;
@@ -164,4 +163,25 @@ bool StateGameObject::CanSeeTarget() {
 	}
 
 	return false;
+}
+
+Player* StateGameObject::GetClosestPlayer() {
+	if (!allPlayers || allPlayers->empty()) return nullptr;
+
+	Player* closestP = nullptr;
+	float minDistSq = FLT_MAX; // 初始化为最大浮点数
+	Vector3 myPos = GetTransform().GetPosition();
+
+	for (Player* p : *allPlayers) {
+		if (!p || !p->IsActive()) continue; // 忽略空指针或不活跃的玩家
+
+		// 使用 LengthSquared 比较距离（比 Length 更快，因为不开根号）
+		float distSq = Vector::LengthSquared(p->GetTransform().GetPosition() - myPos);
+
+		if (distSq < minDistSq) {
+			minDistSq = distSq;
+			closestP = p;
+		}
+	}
+	return closestP;
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "GameObject.h"
+#include "Player.h"
 
 namespace NCL {
     namespace CSC8503 {
@@ -23,6 +24,9 @@ namespace NCL {
             // --- 任务 1.3 修改: 使用物理碰撞回调 ---
             virtual void OnCollisionBegin(GameObject* otherObject) override;
 
+            void SetPlayerList(std::vector<Player*>* players) { allPlayers = players; }
+            Player* GetClosestPlayer();
+
         protected:
             // --- 任务 1.1: 状态行为函数 ---
             void Patrol(float dt);
@@ -35,6 +39,7 @@ namespace NCL {
             StateMachine* stateMachine;
             float counter;
 
+            std::vector<Player*>* allPlayers;
             // AI 数据
             GameObject* playerTarget = nullptr;
             GameWorld* gameWorld = nullptr; // 用于射线检测

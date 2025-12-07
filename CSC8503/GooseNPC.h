@@ -5,6 +5,7 @@
 #include "BehaviourSelector.h"
 #include "BehaviourSequence.h"
 #include "BehaviourAction.h"
+#include "Player.h"
 
 namespace NCL::CSC8503 {
     class GooseNPC : public StateGameObject {
@@ -13,7 +14,6 @@ namespace NCL::CSC8503 {
         ~GooseNPC();
 
         void Update(float dt) override;
-		void SetPlayer(GameObject* player) { playerTarget = player; }
 
     protected:
 		// Behaviour Tree
@@ -26,7 +26,6 @@ namespace NCL::CSC8503 {
         void LookAt(Vector3 targetPos, float dt); // 加入 dt 以实现平滑转向
 
         NavigationGrid* grid;
-        GameObject* playerTarget;
 
         BehaviourNode* rootNode;
 

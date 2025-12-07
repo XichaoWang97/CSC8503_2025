@@ -19,6 +19,7 @@ GooseNPC::~GooseNPC() {
 }
 
 void GooseNPC::Update(float dt) {
+    playerTarget = GetClosestPlayer();
     if (rootNode) {
         rootNode->Execute(dt);
     }

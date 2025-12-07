@@ -40,20 +40,21 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	// 注册处理: 客户端发来的输入包 + 确认包
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Received_State, this);
+	InitWorld();
 
-	InitWorld(); // 初始化游戏场景
-	// 【核心逻辑】根据人数生成 Player 容器
-	// Player 0 = Server (Me)
-	// Player 1...N = Clients
+	// generate players
 	for (int i = 0; i < playerCount; ++i) {
 		GameObject* newPlayer = SpawnNetworkedPlayer(i);
 
 		// 记录到 Server 的 Map 中，方便通过 NetworkID 查找
 		serverPlayers[i] = newPlayer;
 	}
+	localPlayerID = 0; // server ID is 0 
 
-	localPlayerID = 0; // 服务器控制 0 号
-	std::cout << "Server Started with " << playerCount << " players container." << std::endl;
+	// tell AI where is player
+	if (goose) goose->SetPlayerList(&players);
+	if (rival) rival->SetPlayerList(&players);
+	if (patrolEnemy) patrolEnemy->SetPlayerList(&players);
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
@@ -82,14 +83,19 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 			p->GetPhysicsObject()->SetInverseMass(0.0f);
 		}
 	}
-
 	// 假设我是 1 号位 (第一个连入的客户端)
 	localPlayerID = 1;
 	std::cout << "Client Started. Assuming I am Player ID " << localPlayerID << std::endl;
 
+
 	// 处理 Goose/AI 的本地物理禁用
 	if (goose && goose->GetPhysicsObject()) goose->GetPhysicsObject()->SetInverseMass(0.0f);
 	if (rival && rival->GetPhysicsObject()) rival->GetPhysicsObject()->SetInverseMass(0.0f);
+
+	// 【新增修复代码】告诉客户端的 AI 玩家列表在哪里（虽然它们主要是视觉表现）
+	if (goose) goose->SetPlayerList(&players);
+	if (rival) rival->SetPlayerList(&players);
+	if (patrolEnemy) patrolEnemy->SetPlayerList(&players);
 }
 
 void NetworkedGame::UpdateGame(float dt) {
@@ -106,15 +112,6 @@ void NetworkedGame::UpdateGame(float dt) {
 
 	if (thisServer) thisServer->UpdateServer();
 	if (thisClient) thisClient->UpdateClient();
-
-	// F9 启动 2 人 Server
-	/*if (!thisServer && !thisClient && Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
-		StartAsServer(2);
-	}
-	// F10 启动 Client
-	if (!thisServer && !thisClient && Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
-		StartAsClient(127, 0, 0, 1);
-	}*/
 
 	MyGame::UpdateGame(dt);
 }
@@ -285,15 +282,13 @@ void NetworkedGame::UpdateAsClient(float dt) {
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {
 	// 计算生成位置，排排站
 	Vector3 pos = Vector3(-60 + (playerID * 10), 5, 60);
-
 	Player* newPlayer = AddPlayerToWorld(pos, 1.0f);
-
 	// 设置 NetworkObject, NetworkID = playerID
 	newPlayer->SetNetworkObject(new NetworkObject(*newPlayer, playerID));
-
 	// 存入 MyGame 的 vector
 	players.push_back(newPlayer);
 
+	newPlayer->SetIgnoreInput(true);
 	return newPlayer;
 }
 

@@ -10,7 +10,7 @@ using namespace CSC8503;
 RivalAI::RivalAI(GameWorld* world, NavigationGrid* _grid) : GameCharacter("RivalAI", world) {
     grid = _grid;
     gameWorld = world;
-    player = nullptr;
+    allPlayers = nullptr;
     currentTarget = nullptr;
     rootNode = nullptr;
 
@@ -46,7 +46,8 @@ void RivalAI::BuildBehaviourTree() {
     BehaviourSequence* seqRunAway = new BehaviourSequence("Survival Mode");
     seqRunAway->AddChild(new BehaviourAction("Check Score", [&](float dt, BehaviourState s) { return HasHighScore(dt); }));
     seqRunAway->AddChild(new BehaviourAction("Check Package", [&](float dt, BehaviourState s) { return IsHoldingPackage(dt); }));
-    seqRunAway->AddChild(new BehaviourAction("Flee Player", [&](float dt, BehaviourState s) { return RunAwayFromPlayer(dt); }));
+    seqRunAway->AddChild(new BehaviourAction("Set Win Target", [&](float dt, BehaviourState s) { return FindWinZone(dt); }));
+    seqRunAway->AddChild(new BehaviourAction("Move To Exit", [&](float dt, BehaviourState s) { return MoveToTarget(dt); }));
 
     // --- 2. 拦截玩家分支 (Intercept) ---
     // 2.1 攻击子分支
@@ -126,11 +127,6 @@ GameObject* RivalAI::FindClosestObject(std::string name) {
 
 GameObject* RivalAI::FindPackage() {
     return FindClosestObject("FragilePackage");
-
-    GameObject* item = GetHeldItem();
-    if (item && item->GetName() == "Stone") {
-		ThrowHeldItem(Vector3(0, 0, 0)); // drop stone if holding
-    }
 }
 
 void RivalAI::CalculatePath(Vector3 targetPos) {
@@ -162,46 +158,38 @@ BehaviourState RivalAI::IsHoldingStone(float dt) {
     return Failure;
 }
 
+Player* RivalAI::FindPlayerHoldingPackage() {
+    if (!allPlayers) return nullptr;
+
+    for (Player* p : *allPlayers) { // 遍历所有玩家
+        if (!p) continue;
+        GameObject* heldItem = p->GetHeldItem();
+        if (heldItem && heldItem->GetName() == "FragilePackage") {
+            return p; // 找到了！就是这个家伙
+        }
+    }
+    return nullptr;
+}
+
 BehaviourState RivalAI::DoesPlayerHavePackage(float dt) {
-    if (!player) return Failure;
-    GameObject* playerItem = player->GetHeldItem();
-    if (playerItem && playerItem->GetName() == "FragilePackage") return Success;
+    Player* targetP = FindPlayerHoldingPackage();
+    if (targetP != nullptr) {
+        // 找到了拿着包裹的玩家，把他设为当前攻击目标
+        currentTarget = targetP;
+        return Success;
+    }
     return Failure;
 }
 
 // Actions
 
-BehaviourState RivalAI::RunAwayFromPlayer(float dt) {
-    if (!player) return Failure;
-
-    Vector3 playerPos = player->GetTransform().GetPosition();
-    Vector3 myPos = GetTransform().GetPosition();
-    Vector3 dirAway = (myPos - playerPos);
-    dirAway.y = 0; // 忽略高度
-    if (Vector::Length(dirAway) < 0.1f) dirAway = Vector3(1, 0, 0); // 防止重叠
-
-    Vector3 targetPos = myPos + Vector::Normalise(dirAway) * 15.0f; // 往反方向跑15米
-
-    // 简单的物理移动，不寻路了，因为是逃跑
-    CalculatePath(targetPos); // 尝试寻路去那个反方向的点
-
-    // 如果寻路失败(比如是墙)，直接物理移动
-    if (pathPoints.empty()) {
-        GetPhysicsObject()->AddForce(Vector::Normalise(dirAway) * 20.0f);
-        LookAt(targetPos);
+BehaviourState RivalAI::FindWinZone(float dt) {
+    GameObject* winZone = FindClosestObject("WinZone");
+    if (exitPoint) {
+        currentTarget = exitPoint;
+        return Success;
     }
-    else {
-        // 使用 MoveToTarget 的逻辑片段
-        Vector3 next = pathPoints[0];
-        Vector3 moveDir = Vector::Normalise(next - myPos);
-        moveDir.y = 0;
-        GetPhysicsObject()->AddForce(moveDir * 20.0f);
-        LookAt(next);
-        if (Vector::Length(next - myPos) < 2.0f) pathPoints.erase(pathPoints.begin());
-    }
-
-    Debug::DrawLine(myPos, targetPos, Vector4(0, 1, 1, 1)); // 画出逃跑线
-    return Ongoing;
+    return Failure;
 }
 
 // find closest stone
@@ -337,8 +325,9 @@ BehaviourState RivalAI::AttemptGrab(float dt) {
 }
 
 BehaviourState RivalAI::ThrowAtPlayer(float dt) {
+	Player* targetP = FindPlayerHoldingPackage(); // confirm target player
 	// Actually, this action aims to the package that player is holding
-    if (!player) return Failure;
+    if (!targetP) return Failure;
 	std::cout << "RivalAI: ThrowAtPlayer action executing.\n";
 	Vector3 packagePos = fragilePackage->GetTransform().GetPosition(); // get package position
     Vector3 myPos = GetTransform().GetPosition();
