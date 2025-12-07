@@ -163,6 +163,7 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (thisServer) {
+		std::cout << "1_!!!!!!!!!!!" << std::endl;
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
 			// Server 收到 Client 的输入 -> 控制对应的 Player
@@ -172,9 +173,10 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			// 假设 Client 连接进来分配的 ID 正好对应我们的 Player ID 1...
 			// 实际上 source 可能是随机的大数，这里简单假设 source 就是 player index
 			// 如果有问题，可以用 map<int source, int playerIndex> 来映射
-
+			int playerIndex = source + 1;
 			// 暂时假定 source 1 就是 Player 1
-			ServerProcessClientInput(source, (ClientPacket*)payload);
+			std::cout << "Packet Source: " << source << " -> Controlling Player Index: " << playerIndex << "2_!!!!!!!!!!!" << std::endl;
+			ServerProcessClientInput(playerIndex, (ClientPacket*)payload);
 			break;
 		}
 		}

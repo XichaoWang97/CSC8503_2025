@@ -43,7 +43,10 @@ namespace NCL {
 			
 			Player* GetLocalPlayer() const { 
 				if (players.empty()) return nullptr; 
-				return players[0]; 
+				if (localPlayerID >= 0 && localPlayerID < players.size()) {
+					return players[localPlayerID];
+				}
+				return nullptr;
 			}
 
 		protected:

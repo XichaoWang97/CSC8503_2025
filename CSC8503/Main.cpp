@@ -413,6 +413,5 @@ int main() {
 
 		Debug::UpdateRenderables(dt);
 	}
-
 	Window::DestroyGameWindow();
 }
