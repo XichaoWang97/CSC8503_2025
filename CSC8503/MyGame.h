@@ -41,16 +41,14 @@ namespace NCL {
 			bool IsGameOver() const { return isGameOver; }
 			bool IsGameWon()  const { return isGameWon; }
 			
-			Player* GetLocalPlayer() const { // get local player pointer
-				if (localPlayerID >= 0 && localPlayerID < players.size()) {
-					return players[localPlayerID];
-				}
-				return nullptr;
+			Player* GetLocalPlayer() const { 
+				if (players.empty()) return nullptr; 
+				return players[0]; 
 			}
+
 		protected:
 			void InitCamera();
 			void InitWorld();
-
 			void InitCourierLevel();
 			virtual void InitDefaultPlayer();
 
@@ -63,7 +61,15 @@ namespace NCL {
 			Player* AddPlayerToWorld(const NCL::Maths::Vector3& position, float radius);
 			RivalAI* AddRivalAIToWorld(const NCL::Maths::Vector3& position, float radius);
 			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position, float radius);
-			
+
+			// Game logic functions
+			void SetCameraToPlayer(Player* player);
+			void PuzzleDoorLogic(float dt);
+			void GetCoinLogic(Player* player, float dt);
+			void PackageLogic(Player* player, float dt);
+			void WinLoseLogic(Player* player);
+			void RivalLogic();
+
 			// pointers to specific game objects
 			GameObject* targetZone = nullptr;  // destination
 			GameObject* puzzleDoor = nullptr;
@@ -74,7 +80,7 @@ namespace NCL {
 			RivalAI* rival = nullptr;
 			FragileGameObject* packageObject = nullptr;
 			StateGameObject* patrolEnemy = nullptr;
-
+			
 			// players stored in a list
 			std::vector<Player*> players;
 			int localPlayerID = 0;
@@ -122,17 +128,7 @@ namespace NCL {
 
 			GameObject* objClosest = nullptr;
 
-			void BridgeConstraintTest();
-
-			
-
-			// constraints for grappling
-			/*struct GrappleInfo {
-				GameObject* holder;       // who is holding
-				GameObject* item;         // what is being held
-				PositionConstraint* constraint; // constraint between them
-			};
-			std::vector<GrappleInfo> activeGrapples; // active grapples in the world*/
+			//void BridgeConstraintTest();
 		};
 	}
 }

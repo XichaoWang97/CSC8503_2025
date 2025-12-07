@@ -108,13 +108,13 @@ void NetworkedGame::UpdateGame(float dt) {
 	if (thisClient) thisClient->UpdateClient();
 
 	// F9 Æô¶¯ 2 ÈË Server
-	if (!thisServer && !thisClient && Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
+	/*if (!thisServer && !thisClient && Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
 		StartAsServer(2);
 	}
 	// F10 Æô¶¯ Client
 	if (!thisServer && !thisClient && Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
 		StartAsClient(127, 0, 0, 1);
-	}
+	}*/
 
 	MyGame::UpdateGame(dt);
 }

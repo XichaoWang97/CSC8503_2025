@@ -94,249 +94,60 @@ MyGame::~MyGame() {
 
 void MyGame::UpdateGame(float dt) {
 
-	// Update camera
-	if (!inSelectionMode) {
-		world.GetMainCamera().UpdateCamera(dt);
-	}
+	world.GetMainCamera().UpdateCamera(dt); // Update camera
 
-	Player* localPlayer = GetLocalPlayer();
-	// camera follow player
-	if (localPlayer) {
+	PuzzleDoorLogic(dt); // Check Puzzle Door
 
-		Vector3 playerPos = localPlayer->GetTransform().GetPosition();
-		
-		float yaw = world.GetMainCamera().GetYaw();
-		float pitch = world.GetMainCamera().GetPitch();
+	Player* localPlayer = GetLocalPlayer(); // single player / player in servant
+	if (localPlayer && packageObject) {
+		SetCameraToPlayer(localPlayer); // camera follow player
 
-		// ristrict pitch angle
-		if (pitch > 30.0f) pitch = 30.0f;
-		if (pitch < -60.0f) pitch = -60.0f;
+		// Show package health
+		float health = packageObject->GetHealth();
+		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1); // change color based on health
+		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
 
-		// calculate camera direction
-		Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(pitch, yaw, 0);
-		Vector3 cameraBackward = cameraRot * Vector3(0, 0, 1);
-
-		// set desired distance and offset
-		float dist = 15.0f;
-		Vector3 offset = Vector3(0, 5, 0); // above player's head
-
-		// Avoid Camera Collision
-		float maxDist = 15.0f;
-		float currentDist = maxDist;
-		// fire ray from player to camera
-		Vector3 rayOrigin = playerPos + offset;
-		Vector3 rayDir = cameraBackward;
-		Ray ray(rayOrigin, rayDir);
-		RayCollision collision;
-		// if ray hits an object
-		if (world.Raycast(ray, collision, true, localPlayer)) {
-			if (collision.rayDistance < maxDist) {
-				// make sure camera is not in the wall
-				currentDist = collision.rayDistance - 0.5f;
-				if (currentDist < 0.5f) currentDist = 0.5f;
-			}
+		// for every player
+		for (Player* player : players) { 
+			PackageLogic(player, dt); // package logic
+			GetCoinLogic(player, dt); // Coin Collection
+			WinLoseLogic(player); // Win/Lose logic
+			player->Update(dt);
 		}
 
-		Vector3 cameraPos = rayOrigin + (cameraBackward * currentDist);
-		world.GetMainCamera().SetPosition(cameraPos);
-
-	    // 【注意】以下的逻辑（包裹、UI、金币等）如果你是联机，需要思考是只显示自己的分还是所有人的!!!!!!!!!!!!!!!!!!!
-	    // 这里为了简化，我先让 UI 显示 localPlayer 的状态
-	    // Package health display
-		if (packageObject) {
-			float health = packageObject->GetHealth();
-			Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
-			Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
-
-			// if package is broken
-			if (packageObject->IsBroken()) {
-				Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
-				// drop package if held
-				if (localPlayer->GetHeldItem() != nullptr) {
-					if (localPlayer->GetHeldItem()->GetName() == "FragilePackage") {
-						localPlayer->ThrowHeldItem(Vector3(0, 0, 0));
-						score = 0; // reset player score
-					}
-				}
-				if (rival->GetHeldItem() != nullptr) {
-					if (rival->GetHeldItem()->GetName() == "FragilePackage") {
-						rival->ThrowHeldItem(Vector3(0, 0, 0));
-						rival->SetScore(0); // reset rival score
-					}
-				}
-				// reset function is in FragileGameObject.cpp
-			}
-		}
-
-		// Update player and rival score
-		if (localPlayer->GetHeldItem() != nullptr) {
-			if (localPlayer->GetHeldItem()->GetName() == "FragilePackage") {
-				score = packageObject->GetCollectionCount(); // reset player score
-			}
-		}
-		if (rival->GetHeldItem() != nullptr) {
-			if (rival->GetHeldItem()->GetName() == "FragilePackage") {
-				rival->SetScore(packageObject->GetCollectionCount()); // reset player score
-			}
-		}
-
-		// puzzle door and pressure plate logic
-		if (puzzleDoor && pressurePlate) {
-			bool isTriggered = false;
-			Vector3 platePos = pressurePlate->GetTransform().GetPosition();
-			Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
-
-			auto CheckTrigger = [&](GameObject* obj) {
-				if (!obj) return false;
-				Vector3 pos = obj->GetTransform().GetPosition();
-				// check AABB
-				return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
-					pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
-					pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
-				};
-
-			// if player or cubeStone is on the pressure plate
-			if (CheckTrigger(localPlayer) || CheckTrigger(cubeStone)) {
-				isTriggered = true;
-			}
-
-			// door movement
-			Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
-			float targetY = isTriggered ? -10.0f : 10.0f;
-			float doorSpeed = 20.0f;
-
-			if (abs(doorPos.y - targetY) > 0.01f) {
-				if (doorPos.y > targetY) {
-					doorPos.y -= doorSpeed * dt;
-					if (doorPos.y < targetY) doorPos.y = targetY;
-				}
-				else {
-					doorPos.y += doorSpeed * dt;
-					if (doorPos.y > targetY) doorPos.y = targetY;
-				}
-				puzzleDoor->GetTransform().SetPosition(doorPos);
-			}
-
-			if (isTriggered) {
-				pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
-			}
-			else {
-				pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
-			}
-		}
-
-		// Coin Collection, iterate in reverse order
-		for (int i = coins.size() - 1; i >= 0; --i) {
-			GameObject* c = coins[i];
-
-			// make coin rotate
-			float rotationSpeed = 90.0f;
-			Quaternion rotation = Quaternion::AxisAngleToQuaterion(Vector3(0, 1, 0), rotationSpeed * dt);
-			Quaternion currentOri = c->GetTransform().GetOrientation();
-			c->GetTransform().SetOrientation(rotation * currentOri);
-
-			if (!c->IsActive()) continue;
-			// calculate distance to player
-			float player_dist = Vector::Length((localPlayer->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
-			float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
-			GameObject* playerHeld = localPlayer->GetHeldItem();
-			GameObject* rivalHeld = rival->GetHeldItem();
-			// collection radius 2.5f, need FragilePackage to collect
-			if (playerHeld) {
-				if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
-					world.RemoveGameObject(c, true); // remove coin from world
-					packageObject->IncreaseCollectionCount(); // increase package collection count
-					coins.erase(coins.begin() + i); // remove coin from vector
-				}
-			}
-			if (rivalHeld) {
-				if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
-					world.RemoveGameObject(c, true); // remove coin from world
-					packageObject->IncreaseCollectionCount(); // increase package collection count
-					coins.erase(coins.begin() + i); // remove coin from vector
-				}
-			}
-		}
-
-		// Win Condition
-		if (!isGameWon && targetZone) {
-			Vector3 zonePos = targetZone->GetTransform().GetPosition();
-			Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
-
-			Vector3 pPos = localPlayer->GetTransform().GetPosition();
-
-			bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
-				pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
-
-			// score && inZone -> win
-			if (inZone && score >= winningScore) {
-				isGameWon = true;
-			}
-			// score is not enough
-			if (inZone && score < winningScore) {
-				Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
-			}
-		}
-		// Death Condition - hit by goose
-		if (!isGameOver && !isGameWon && localPlayer && goose) {
-			Vector3 pPos = localPlayer->GetTransform().GetPosition();
-			Vector3 gPos = goose->GetTransform().GetPosition();
-
-			// simple distance check, large than goose size
-			float dist = Vector::Length((pPos - gPos));
-			if (dist < 4.1f) {
-				isGameOver = true;
-			}
-		}
-
+		RivalLogic();
 		// Display score
 		std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
-		// score color change if reached winning score
-		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
+		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1); // score color change
 		Debug::Print(scoreText, Vector2(75, 10), scoreColor);
 		std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
 		Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
 
-		//---------------------------------~o( > . <)o~---------------------------------//
-		// player object update
-		if (!inSelectionMode) {
-			localPlayer->Update(dt);
-		}
-		// package object update
-		if (packageObject) {
-			packageObject->Update(dt);
-		}
-
+		// ---~o( > . <)o~---Original Code---~o(> . < )o~---
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
 			InitWorld(); //We can reset the simulation at any time with F1
 			selectionObject = nullptr;
 		}
-
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
 			InitCamera(); //F2 will reset the camera to a specific default place
 		}
-
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
 			useGravity = !useGravity; //Toggle gravity!
 			physics.UseGravity(useGravity);
 		}
-		//Running certain physics updates in a consistent order might cause some
-		//bias in the calculations - the same objects might keep 'winning' the constraint
-		//allowing the other one to stretch too much etc. Shuffling the order so that it
-		//is random every frame can help reduce such bias.
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
+
+		/*if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
 			world.ShuffleConstraints(true);
 		}
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
 			world.ShuffleConstraints(false);
 		}
-
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
 			world.ShuffleObjects(true);
 		}
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
 			world.ShuffleObjects(false);
-		}
+		}*/
 
 		// Gravity status display
 		if (useGravity) {
@@ -351,6 +162,7 @@ void MyGame::UpdateGame(float dt) {
 				o->Update(dt);
 			}
 		);
+
 		// Update physics and world
 		physics.Update(dt);
 		world.UpdateWorld(dt);
@@ -373,9 +185,25 @@ void MyGame::InitWorld() {
 	score = 0;
 	isGameOver = false;
 	isGameWon = false;
-	// BUGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+
 	InitCourierLevel();
 	InitDefaultPlayer();
+}
+
+void MyGame::InitDefaultPlayer() {
+	Vector3 pos = Vector3(-60, 5, 60);
+	Player* p = AddPlayerToWorld(pos, 1.0f);
+
+	players.push_back(p); // add to players list
+
+	// set local player ID
+	localPlayerID = 0;
+
+	// set player reference as target for rival and goose
+	if (rival) rival->SetPlayer(p);
+	if (goose) goose->SetPlayer(p);
+	if (patrolEnemy) patrolEnemy->SetTarget(p);
+	p->SetFragilePackage(packageObject);
 }
 
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
@@ -537,22 +365,6 @@ Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radi
 	return newplayer;
 }
 
-void MyGame::InitDefaultPlayer() {
-	Vector3 pos = Vector3(-60, 5, 60);
-	Player* p = AddPlayerToWorld(pos, 1.0f);
-
-	players.push_back(p); // add to players list
-
-	// set local player ID
-	localPlayerID = 0;
-
-	// set player reference as target for rival and goose
-	if (rival) rival->SetPlayer(p);
-	if (goose) goose->SetPlayer(p);
-	if (patrolEnemy) patrolEnemy->SetTarget(p);
-	p->SetFragilePackage(packageObject);
-}
-
 RivalAI* MyGame::AddRivalAIToWorld(const NCL::Maths::Vector3& position, float radius)
 {
 	float inverseMass = 0.5f;
@@ -608,7 +420,7 @@ GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position, float radius)
 	return newGoose;
 }
 
-void MyGame::BridgeConstraintTest() {
+/*void MyGame::BridgeConstraintTest() {
 	Vector3 cubeSize = Vector3(8, 8, 8);
 
 	float invCubeMass = 5; // how heavy the middle pieces are
@@ -632,6 +444,194 @@ void MyGame::BridgeConstraintTest() {
 
 	PositionConstraint* constraint = new PositionConstraint(previous, end, maxDistance);
 	world.AddConstraint(constraint);
+}*/
+
+// Game logic functions
+
+void MyGame::SetCameraToPlayer(Player* player) {
+	Vector3 playerPos = player->GetTransform().GetPosition();
+
+	float yaw = world.GetMainCamera().GetYaw();
+	float pitch = world.GetMainCamera().GetPitch();
+
+	// ristrict pitch angle
+	if (pitch > 30.0f) pitch = 30.0f;
+	if (pitch < -60.0f) pitch = -60.0f;
+
+	// calculate camera direction
+	Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(pitch, yaw, 0);
+	Vector3 cameraBackward = cameraRot * Vector3(0, 0, 1);
+
+	// set desired distance and offset
+	float dist = 15.0f;
+	Vector3 offset = Vector3(0, 5, 0); // above player's head
+
+	// Avoid Camera Collision
+	float maxDist = 15.0f;
+	float currentDist = maxDist;
+	// fire ray from player to camera
+	Vector3 rayOrigin = playerPos + offset;
+	Vector3 rayDir = cameraBackward;
+	Ray ray(rayOrigin, rayDir);
+	RayCollision collision;
+	// if ray hits an object
+	if (world.Raycast(ray, collision, true, player)) {
+		if (collision.rayDistance < maxDist) {
+			// make sure camera is not in the wall
+			currentDist = collision.rayDistance - 0.5f;
+			if (currentDist < 0.5f) currentDist = 0.5f;
+		}
+	}
+
+	Vector3 cameraPos = rayOrigin + (cameraBackward * currentDist);
+	world.GetMainCamera().SetPosition(cameraPos);
+}
+
+void MyGame::PuzzleDoorLogic(float dt) {
+	if (!puzzleDoor || !pressurePlate) return;
+	bool isTriggered = false;
+	Vector3 platePos = pressurePlate->GetTransform().GetPosition();
+	Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
+
+	auto CheckTrigger = [&](GameObject* obj) {
+		if (!obj) return false;
+		Vector3 pos = obj->GetTransform().GetPosition();
+		// check AABB
+		return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
+			pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
+			pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
+		};
+
+	// if cubeStone is on the pressure plate
+	if (CheckTrigger(cubeStone)) {
+		isTriggered = true;
+	}
+
+	// door movement
+	Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
+	float targetY = isTriggered ? -10.0f : 10.0f;
+	float doorSpeed = 20.0f;
+
+	if (abs(doorPos.y - targetY) > 0.01f) {
+		if (doorPos.y > targetY) {
+			doorPos.y -= doorSpeed * dt;
+			if (doorPos.y < targetY) doorPos.y = targetY;
+		}
+		else {
+			doorPos.y += doorSpeed * dt;
+			if (doorPos.y > targetY) doorPos.y = targetY;
+		}
+		puzzleDoor->GetTransform().SetPosition(doorPos);
+	}
+
+	if (isTriggered) {
+		pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
+	}
+	else {
+		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
+	}
+}
+
+void MyGame::GetCoinLogic(Player* player, float dt) {
+	for (int i = coins.size() - 1; i >= 0; --i) {
+		GameObject* c = coins[i];
+
+		// make coin rotate
+		float rotationSpeed = 90.0f;
+		Quaternion rotation = Quaternion::AxisAngleToQuaterion(Vector3(0, 1, 0), rotationSpeed * dt);
+		Quaternion currentOri = c->GetTransform().GetOrientation();
+		c->GetTransform().SetOrientation(rotation * currentOri);
+
+		if (!c->IsActive()) continue;
+		// calculate distance to player
+		float player_dist = Vector::Length((player->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+		GameObject* playerHeld = player->GetHeldItem();
+		// collection radius 2.5f, need FragilePackage to collect
+		if (playerHeld) {
+			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
+				world.RemoveGameObject(c, true); // remove coin from world
+				packageObject->IncreaseCollectionCount(); // increase package collection count
+				coins.erase(coins.begin() + i); // remove coin from vector
+			}
+		}
+	}
+}
+
+void MyGame::PackageLogic(Player* player, float dt) {
+	if (!player || !packageObject) return;
+	
+	if (player->GetHeldItem() != nullptr && player->GetHeldItem()->GetName() == "FragilePackage") {
+		score = packageObject->GetCollectionCount(); // reset player score
+		if(packageObject->IsBroken()) {
+			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
+			player->ThrowHeldItem(Vector3(0, 0, 0)); // drop broken package
+			score = 0; // reset player score
+		}
+	}
+	packageObject->Update(dt);
+}
+
+void MyGame::WinLoseLogic(Player* player){
+	// Win Condition
+	if (!isGameWon && targetZone) {
+		Vector3 zonePos = targetZone->GetTransform().GetPosition();
+		Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
+
+		Vector3 pPos = player->GetTransform().GetPosition();
+
+		bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
+			pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
+
+		// score && inZone -> win
+		if (inZone && score >= winningScore) {
+			isGameWon = true;
+		}
+		// score is not enough
+		if (inZone && score < winningScore) {
+			Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
+		}
+	}
+	// Death Condition - hit by goose
+	if (!isGameOver && !isGameWon && player && goose) {
+		Vector3 pPos = player->GetTransform().GetPosition();
+		Vector3 gPos = goose->GetTransform().GetPosition();
+
+		// simple distance check, large than goose size
+		float dist = Vector::Length((pPos - gPos));
+		if (dist < 4.1f) {
+			isGameOver = true;
+		}
+	}
+}
+
+void MyGame::RivalLogic(){
+	// rival has the same logic as player
+	if (!rival || !packageObject) return;
+	// About coin collection
+	for (int i = coins.size() - 1; i >= 0; --i) {
+		GameObject* c = coins[i];
+
+		if (!c->IsActive()) continue;
+		float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+		GameObject* rivalHeld = rival->GetHeldItem();
+		
+		if (rivalHeld) {
+			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
+				world.RemoveGameObject(c, true); // remove coin from world
+				packageObject->IncreaseCollectionCount(); // increase package collection count
+				coins.erase(coins.begin() + i); // remove coin from vector
+			}
+		}
+	}
+
+	// Update rival score
+	if (rival->GetHeldItem() != nullptr && rival->GetHeldItem()->GetName() == "FragilePackage") {
+		rival->SetScore(packageObject->GetCollectionCount());
+		if (packageObject->IsBroken()) {
+			rival->ThrowHeldItem(Vector3(0, 0, 0));
+			rival->SetScore(0);
+		}
+	}
 }
 
 // Core Logic of Level Building

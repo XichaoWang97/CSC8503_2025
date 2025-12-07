@@ -33,7 +33,7 @@ namespace NCL::CSC8503 {
 		// generate player object for a given client ID
 		GameObject* SpawnNetworkedPlayer(int playerID);
 		void ServerProcessClientInput(int playerID, ClientPacket* packet);
-
+		
 		GameServer* thisServer;
 		GameClient* thisClient;
 		float timeToNextPacket;
