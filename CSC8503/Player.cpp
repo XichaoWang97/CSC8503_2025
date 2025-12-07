@@ -15,9 +15,33 @@ void Player::Update(float dt) {
     if (actionCooldown > 0.0f) {
         actionCooldown -= dt;
     }
+    // read from local if it is not networked game mode
     if (!ignoreInput) {
-        PlayerControl(dt);
+        currentInputs.isMoving = false;
+        currentInputs.jump = false;
+        currentInputs.attack = false;
+        currentInputs.axis = Vector3(0, 0, 0);
+        currentInputs.cameraYaw = gameWorld->GetMainCamera().GetYaw();
+
+        if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) currentInputs.axis.z -= 1;
+        if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) currentInputs.axis.z += 1;
+        if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) currentInputs.axis.x -= 1;
+        if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) currentInputs.axis.x += 1;
+
+        if (Vector::LengthSquared(currentInputs.axis) > 0) {
+            currentInputs.isMoving = true;
+        }
+
+        if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
+            currentInputs.jump = true;
+        }
+
+        if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) {
+            currentInputs.attack = true;
+        }
     }
+
+    PlayerControl(dt);
     DrawGrappleLine();
 }
 
@@ -33,8 +57,7 @@ void Player::PlayerControl(float dt) {
     float rotationSpeed = 10.0f;
 
 	// get camera yaw
-    float yaw = gameWorld->GetMainCamera().GetYaw();
-    Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, yaw, 0);
+    Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, currentInputs.cameraYaw, 0);
 
 	// build input direction
     Vector3 inputDir(0, 0, 0);
@@ -43,38 +66,30 @@ void Player::PlayerControl(float dt) {
     if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) inputDir.x -= 1;
     if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) inputDir.x += 1;
 
-    bool isMoving = (Vector::LengthSquared(inputDir) > 0);
-
-    if (isMoving) {
-        inputDir = Vector::Normalise(inputDir);
+    if (currentInputs.isMoving) {
+        Vector3 inputDir = Vector::Normalise(currentInputs.axis);
         Vector3 targetDir = cameraRot * inputDir;
 
-		// apply rotation towards movement direction
+        // apply rotation
         Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), -targetDir, Vector3(0, 1, 0));
         Quaternion targetOrientation(Matrix::Inverse(lookAtMat));
-
         Quaternion currentOrientation = transform.GetOrientation();
 
-		// Ensure shortest path
         float dot = Quaternion::Dot(currentOrientation, targetOrientation);
         if (dot < 0.0f) {
-            targetOrientation.x = -targetOrientation.x;
-            targetOrientation.y = -targetOrientation.y;
-            targetOrientation.z = -targetOrientation.z;
-            targetOrientation.w = -targetOrientation.w;
+            targetOrientation = targetOrientation * -1.0f;
         }
 
         Quaternion newOrientation = Quaternion::Slerp(currentOrientation, targetOrientation, rotationSpeed * dt);
-
         transform.SetOrientation(newOrientation);
         phys->SetAngularVelocity(Vector3(0, 0, 0));
 
-        // Apply Force
+        // add force
         phys->AddForce(targetDir * forceMagnitude);
     }
 
     // Grab and Throw
-    if (Window::GetMouse()->ButtonPressed(MouseButtons::Left) && actionCooldown <= 0.0f) {
+    if (currentInputs.attack && actionCooldown <= 0.0f) {
         Vector3 playerDir = GetTransform().GetOrientation() * Vector3(0, 0, 1);
 
         if (GetHeldItem()) {
@@ -97,7 +112,7 @@ void Player::PlayerControl(float dt) {
     }
 
 	// Damping when not moving
-    if (!isMoving) {
+    if (!currentInputs.isMoving) {
         if (Vector::Length(planarVelocity) > 0.1f) {
             float dampingFactor = 5.0f;
             phys->AddForce(-planarVelocity * dampingFactor);
@@ -105,7 +120,7 @@ void Player::PlayerControl(float dt) {
     }
 
     // jump
-    if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
+    if (currentInputs.jump) {
         if (IsPlayerOnGround()) {
             phys->ApplyLinearImpulse(Vector3(0, 15, 0));
         }

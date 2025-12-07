@@ -51,6 +51,12 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	}
 	localPlayerID = 0; // server ID is 0 
 
+	// 允许主机玩家(ID 0)直接读取本地键盘，不再受 20Hz 网络频率限制, 这样 60fps 下每一帧都能响应操作
+	Player* localPlayer = (Player*)serverPlayers[localPlayerID];
+	if (localPlayer) {
+		localPlayer->SetIgnoreInput(false);
+	}
+
 	// tell AI where is player
 	if (goose) goose->SetPlayerList(&players);
 	if (rival) rival->SetPlayerList(&players);
@@ -99,17 +105,22 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 }
 
 void NetworkedGame::UpdateGame(float dt) {
-	timeToNextPacket -= dt;
+	// 1. 客户端逻辑：每帧都运行，确保不漏掉按键
+	if (thisClient) {
+		UpdateAsClient(dt);
+		// 这一步发送包，如果觉得发包太频繁(60Hz)，可以在 UpdateAsClient 内部加计时器
+		// 但对于课程作业，每帧发包通常是带来最流畅手感的简单做法。
+	}
+
+	// 2. 服务器逻辑：依然保持 20Hz (因为这是发送大量快照，太频繁会卡死)
 	if (timeToNextPacket < 0) {
 		if (thisServer) {
 			UpdateAsServer(dt);
 		}
-		else if (thisClient) {
-			UpdateAsClient(dt);
-		}
 		timeToNextPacket += 1.0f / 20.0f;
 	}
 
+	// 3. 网络更新
 	if (thisServer) thisServer->UpdateServer();
 	if (thisClient) thisClient->UpdateClient();
 
@@ -118,33 +129,7 @@ void NetworkedGame::UpdateGame(float dt) {
 
 // Server Logic
 void NetworkedGame::UpdateAsServer(float dt) {
-	// 1. 处理 Server 本地玩家 (Player 0) 的输入
-	if (localPlayerID < players.size()) {
-		Player* serverPlayer = players[localPlayerID];
-		// 简单的本地控制逻辑
-		// 获取摄像机的 Yaw 角度
-		float yaw = world.GetMainCamera().GetYaw();
-
-		// === 【修改开始】 手动计算 Forward 和 Right ===
-
-		// 创建一个基于 Yaw 的旋转矩阵 (绕 Y 轴旋转)
-		// 这样计算出来的方向本身就是水平的，不需要再手动设 y=0
-		Matrix3 yawRotation = Matrix::RotationMatrix3x3(yaw, Vector3(0, 1, 0));
-		// NCL 坐标系中，默认 Forward 是 -Z (0, 0, -1)，Right 是 +X (1, 0, 0)
-		// 使用矩阵旋转这些默认向量
-		Vector3 fwd = yawRotation * Vector3(0, 0, -1);
-		Vector3 right = yawRotation * Vector3(1, 0, 0);
-
-		float speed = 30.0f;
-		PhysicsObject* phys = serverPlayer->GetPhysicsObject();
-
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) phys->AddForce(fwd * speed);
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) phys->AddForce(-fwd * speed);
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) phys->AddForce(-right * speed);
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) phys->AddForce(right * speed);
-	}
-
-	// 2. 发送快照
+	// 发送快照
 	packetsToSnapshot--;
 	if (packetsToSnapshot < 0) {
 		BroadcastSnapshot(false);
@@ -166,11 +151,7 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 		if (!o) {
 			continue;
 		}
-		//TODO - you'll need some way of determining
-		//when a player has sent the server an acknowledgement
-		//and store the lastID somewhere. A map between player
-		//and an int could work, or it could be part of a 
-		//NetworkPlayer struct. 
+
 		int playerState = 0;
 		GamePacket* newPacket = nullptr;
 		if (o->WritePacket(&newPacket, deltaFrame, playerState)) {
@@ -225,56 +206,60 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 
 void NetworkedGame::ServerProcessClientInput(int playerID, ClientPacket* packet) {
 	// 查找对应的玩家对象
-	GameObject* playerObj = nullptr;
+	if (playerID < 0 || playerID >= players.size()) return;
 
-	// 从 vector 查找更直接
-	if (playerID >= 0 && playerID < players.size()) {
-		playerObj = players[playerID];
-	}
-
+	// 强转为 Player* 以便调用 SetPlayerInput
+	Player* playerObj = (Player*)players[playerID];
 	if (!playerObj) return;
 
-	PhysicsObject* phys = playerObj->GetPhysicsObject();
-	if (!phys) return;
+	// 构造输入状态
+	PlayerInputs inputs;
 
-	float speed = 50.0f; // 力度大一点
-	Vector3 inputDir = Vector3(0, 0, 0);
-	if (packet->axis[0] != 0) inputDir.z = (float)packet->axis[0] / 100.0f;
-	if (packet->axis[1] != 0) inputDir.x = (float)packet->axis[1] / 100.0f;
+	// 解析轴向
+	inputs.axis = Vector3(0, 0, 0);
+	if (packet->axis[0] != 0) inputs.axis.z = (float)packet->axis[0] / 100.0f;
+	if (packet->axis[1] != 0) inputs.axis.x = (float)packet->axis[1] / 100.0f;
 
-	// 使用 Client 传来的 Yaw 确定方向
-	Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, packet->yaw, 0);
-	Vector3 worldDir = cameraRot * inputDir;
-	worldDir.y = 0;
-	worldDir = Vector::Normalise(worldDir);
+	if (Vector::LengthSquared(inputs.axis) > 0) inputs.isMoving = true;
 
-	if (Vector::LengthSquared(worldDir) > 0) {
-		phys->AddForce(worldDir * speed);
-	}
+	// 解析摄像机角度
+	inputs.cameraYaw = packet->yaw;
 
-	if (packet->buttonstates[0] > 0) {
-		phys->ApplyLinearImpulse(Vector3(0, 10, 0));
-	}
+	// 解析按键
+	if (packet->buttonstates[0] > 0) inputs.jump = true;
+	if (packet->buttonstates[1] > 0) inputs.attack = true;
+
+	// 【关键】将网络包转化为 Player 的输入
+	playerObj->SetPlayerInput(inputs);
 }
 
 // Client Logic
 void NetworkedGame::UpdateAsClient(float dt) {
-	// 收集键盘输入，发给服务器去控制 "My Player"
 	ClientPacket newPacket;
 
 	int forward = 0;
 	int right = 0;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) right += 100;
+
+	// 这里的逻辑必须和 Server 解析的逻辑对应
+	// Server 解析：axis[0] 是 Z (前后)，axis[1] 是 X (左右)
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100; // Z-
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100; // Z+
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;   // X-
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) right += 100;   // X+
 
 	newPacket.axis[0] = forward;
 	newPacket.axis[1] = right;
-	newPacket.yaw = world.GetMainCamera().GetYaw();
-	newPacket.lastID = 0;
 
+	// 发送 Yaw，这样服务器才能知道你面朝哪里
+	newPacket.yaw = world.GetMainCamera().GetYaw();
+
+	newPacket.lastID = 0; // 暂时不用
+
+	// 按键状态
+	newPacket.buttonstates[0] = 0;
+	newPacket.buttonstates[1] = 0;
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
+	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 
 	thisClient->SendPacket(newPacket);
 }
