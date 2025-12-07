@@ -40,33 +40,44 @@ namespace NCL {
 
 			bool IsGameOver() const { return isGameOver; }
 			bool IsGameWon()  const { return isGameWon; }
-
+			
+			Player* GetLocalPlayer() const { // get local player pointer
+				if (localPlayerID >= 0 && localPlayerID < players.size()) {
+					return players[localPlayerID];
+				}
+				return nullptr;
+			}
 		protected:
 			void InitCamera();
 			void InitWorld();
 
 			void InitCourierLevel();
+			virtual void InitDefaultPlayer();
 
 			// Add specific game objects to the world
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f); // also as stones
 			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f, std::string name = "Terrain");
 			GameObject* AddCoinToWorld(const NCL::Maths::Vector3& position, Vector3 dimensions, float inverseMass = 1.0f);
-			StateGameObject* AddEnemyToWorld(const NCL::Maths::Vector3& position);
+			StateGameObject* AddPatrolEnemyToWorld(const NCL::Maths::Vector3& position, const Vector3& patrolDestination);
 			Player* AddPlayerToWorld(const NCL::Maths::Vector3& position, float radius);
 			RivalAI* AddRivalAIToWorld(const NCL::Maths::Vector3& position, float radius);
 			GooseNPC* AddGooseNPCToWorld(const NCL::Maths::Vector3& position, float radius);
-
+			
 			// pointers to specific game objects
 			GameObject* targetZone = nullptr;  // destination
 			GameObject* puzzleDoor = nullptr;
 			GameObject* pressurePlate = nullptr;
 			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
 			GameObject* coinBonus = nullptr;  // bonus coin
-			Player* player = nullptr;
-			RivalAI* rival = nullptr;
 			GooseNPC* goose = nullptr;
+			RivalAI* rival = nullptr;
 			FragileGameObject* packageObject = nullptr;
+			StateGameObject* patrolEnemy = nullptr;
+
+			// players stored in a list
+			std::vector<Player*> players;
+			int localPlayerID = 0;
 			
 			// About coin and score
 			int score = 0;

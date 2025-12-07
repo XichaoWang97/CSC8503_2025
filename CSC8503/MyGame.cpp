@@ -4,7 +4,7 @@
 #include "PhysicsObject.h"
 #include "RenderObject.h"
 #include "TextureLoader.h"
-
+#include "NetworkObject.h"
 #include "PositionConstraint.h"
 #include "OrientationConstraint.h"
 #include "StateGameObject.h"
@@ -68,6 +68,7 @@ MyGame::MyGame(GameWorld& inWorld, GameTechRendererInterface& inRenderer, Physic
 
 	glassMaterial.type = MaterialType::Transparent;
 	glassMaterial.diffuseTex = glassTex;
+	localPlayerID = 0;
 
 	InitCamera();
 	InitWorld();
@@ -98,9 +99,11 @@ void MyGame::UpdateGame(float dt) {
 		world.GetMainCamera().UpdateCamera(dt);
 	}
 
+	Player* localPlayer = GetLocalPlayer();
 	// camera follow player
-	if (player) {
-		Vector3 playerPos = player->GetTransform().GetPosition();
+	if (localPlayer) {
+
+		Vector3 playerPos = localPlayer->GetTransform().GetPosition();
 		
 		float yaw = world.GetMainCamera().GetYaw();
 		float pitch = world.GetMainCamera().GetPitch();
@@ -126,7 +129,7 @@ void MyGame::UpdateGame(float dt) {
 		Ray ray(rayOrigin, rayDir);
 		RayCollision collision;
 		// if ray hits an object
-		if (world.Raycast(ray, collision, true, player)) {
+		if (world.Raycast(ray, collision, true, localPlayer)) {
 			if (collision.rayDistance < maxDist) {
 				// make sure camera is not in the wall
 				currentDist = collision.rayDistance - 0.5f;
@@ -136,38 +139,38 @@ void MyGame::UpdateGame(float dt) {
 
 		Vector3 cameraPos = rayOrigin + (cameraBackward * currentDist);
 		world.GetMainCamera().SetPosition(cameraPos);
-	}
 
-	// Package health display
-	if (packageObject) {
-		float health = packageObject->GetHealth();
-		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
-		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
+	    // 【注意】以下的逻辑（包裹、UI、金币等）如果你是联机，需要思考是只显示自己的分还是所有人的!!!!!!!!!!!!!!!!!!!
+	    // 这里为了简化，我先让 UI 显示 localPlayer 的状态
+	    // Package health display
+		if (packageObject) {
+			float health = packageObject->GetHealth();
+			Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1);
+			Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
 
-		// if package is broken
-		if (packageObject->IsBroken()) {
-			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
-			// drop package if held
-			if (player->GetHeldItem() != nullptr) {
-				if (player->GetHeldItem()->GetName() == "FragilePackage") {
-					player->ThrowHeldItem(Vector3(0, 0, 0));
-					score = 0; // reset player score
+			// if package is broken
+			if (packageObject->IsBroken()) {
+				Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
+				// drop package if held
+				if (localPlayer->GetHeldItem() != nullptr) {
+					if (localPlayer->GetHeldItem()->GetName() == "FragilePackage") {
+						localPlayer->ThrowHeldItem(Vector3(0, 0, 0));
+						score = 0; // reset player score
+					}
 				}
-			}
-			if (rival->GetHeldItem() != nullptr) {
-				if (rival->GetHeldItem()->GetName() == "FragilePackage") {
-					rival->ThrowHeldItem(Vector3(0, 0, 0));
-					rival->SetScore(0); // reset rival score
+				if (rival->GetHeldItem() != nullptr) {
+					if (rival->GetHeldItem()->GetName() == "FragilePackage") {
+						rival->ThrowHeldItem(Vector3(0, 0, 0));
+						rival->SetScore(0); // reset rival score
+					}
 				}
+				// reset function is in FragileGameObject.cpp
 			}
-			// reset function is in FragileGameObject.cpp
 		}
-	}
 
-	// Update player and rival score
-	if (player) {
-		if (player->GetHeldItem() != nullptr) {
-			if (player->GetHeldItem()->GetName() == "FragilePackage") {
+		// Update player and rival score
+		if (localPlayer->GetHeldItem() != nullptr) {
+			if (localPlayer->GetHeldItem()->GetName() == "FragilePackage") {
 				score = packageObject->GetCollectionCount(); // reset player score
 			}
 		}
@@ -176,182 +179,182 @@ void MyGame::UpdateGame(float dt) {
 				rival->SetScore(packageObject->GetCollectionCount()); // reset player score
 			}
 		}
-	}
-	
-	// puzzle door and pressure plate logic
-	if (puzzleDoor && pressurePlate) {
-		bool isTriggered = false;
-		Vector3 platePos = pressurePlate->GetTransform().GetPosition();
-		Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
 
-		auto CheckTrigger = [&](GameObject* obj) {
-			if (!obj) return false;
-			Vector3 pos = obj->GetTransform().GetPosition();
-			// check AABB
-			return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
-				pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
-				pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
-		};
+		// puzzle door and pressure plate logic
+		if (puzzleDoor && pressurePlate) {
+			bool isTriggered = false;
+			Vector3 platePos = pressurePlate->GetTransform().GetPosition();
+			Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
 
-		// if player or cubeStone is on the pressure plate
-		if (CheckTrigger(player) || CheckTrigger(cubeStone)) {
-			isTriggered = true;
-		}
+			auto CheckTrigger = [&](GameObject* obj) {
+				if (!obj) return false;
+				Vector3 pos = obj->GetTransform().GetPosition();
+				// check AABB
+				return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
+					pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
+					pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
+				};
 
-		// door movement
-		Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
-		float targetY = isTriggered ? -10.0f : 10.0f;
-		float doorSpeed = 20.0f;
+			// if player or cubeStone is on the pressure plate
+			if (CheckTrigger(localPlayer) || CheckTrigger(cubeStone)) {
+				isTriggered = true;
+			}
 
-		if (abs(doorPos.y - targetY) > 0.01f) {
-			if (doorPos.y > targetY) {
-				doorPos.y -= doorSpeed * dt;
-				if (doorPos.y < targetY) doorPos.y = targetY;
+			// door movement
+			Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
+			float targetY = isTriggered ? -10.0f : 10.0f;
+			float doorSpeed = 20.0f;
+
+			if (abs(doorPos.y - targetY) > 0.01f) {
+				if (doorPos.y > targetY) {
+					doorPos.y -= doorSpeed * dt;
+					if (doorPos.y < targetY) doorPos.y = targetY;
+				}
+				else {
+					doorPos.y += doorSpeed * dt;
+					if (doorPos.y > targetY) doorPos.y = targetY;
+				}
+				puzzleDoor->GetTransform().SetPosition(doorPos);
+			}
+
+			if (isTriggered) {
+				pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
 			}
 			else {
-				doorPos.y += doorSpeed * dt;
-				if (doorPos.y > targetY) doorPos.y = targetY;
+				pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
 			}
-			puzzleDoor->GetTransform().SetPosition(doorPos);
 		}
 
-		if (isTriggered) {
-			pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
+		// Coin Collection, iterate in reverse order
+		for (int i = coins.size() - 1; i >= 0; --i) {
+			GameObject* c = coins[i];
+
+			// make coin rotate
+			float rotationSpeed = 90.0f;
+			Quaternion rotation = Quaternion::AxisAngleToQuaterion(Vector3(0, 1, 0), rotationSpeed * dt);
+			Quaternion currentOri = c->GetTransform().GetOrientation();
+			c->GetTransform().SetOrientation(rotation * currentOri);
+
+			if (!c->IsActive()) continue;
+			// calculate distance to player
+			float player_dist = Vector::Length((localPlayer->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+			float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
+			GameObject* playerHeld = localPlayer->GetHeldItem();
+			GameObject* rivalHeld = rival->GetHeldItem();
+			// collection radius 2.5f, need FragilePackage to collect
+			if (playerHeld) {
+				if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
+					world.RemoveGameObject(c, true); // remove coin from world
+					packageObject->IncreaseCollectionCount(); // increase package collection count
+					coins.erase(coins.begin() + i); // remove coin from vector
+				}
+			}
+			if (rivalHeld) {
+				if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
+					world.RemoveGameObject(c, true); // remove coin from world
+					packageObject->IncreaseCollectionCount(); // increase package collection count
+					coins.erase(coins.begin() + i); // remove coin from vector
+				}
+			}
+		}
+
+		// Win Condition
+		if (!isGameWon && targetZone) {
+			Vector3 zonePos = targetZone->GetTransform().GetPosition();
+			Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
+
+			Vector3 pPos = localPlayer->GetTransform().GetPosition();
+
+			bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
+				pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
+
+			// score && inZone -> win
+			if (inZone && score >= winningScore) {
+				isGameWon = true;
+			}
+			// score is not enough
+			if (inZone && score < winningScore) {
+				Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
+			}
+		}
+		// Death Condition - hit by goose
+		if (!isGameOver && !isGameWon && localPlayer && goose) {
+			Vector3 pPos = localPlayer->GetTransform().GetPosition();
+			Vector3 gPos = goose->GetTransform().GetPosition();
+
+			// simple distance check, large than goose size
+			float dist = Vector::Length((pPos - gPos));
+			if (dist < 4.1f) {
+				isGameOver = true;
+			}
+		}
+
+		// Display score
+		std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
+		// score color change if reached winning score
+		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
+		Debug::Print(scoreText, Vector2(75, 10), scoreColor);
+		std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
+		Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
+
+		//---------------------------------~o( > . <)o~---------------------------------//
+		// player object update
+		if (!inSelectionMode) {
+			localPlayer->Update(dt);
+		}
+		// package object update
+		if (packageObject) {
+			packageObject->Update(dt);
+		}
+
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
+			InitWorld(); //We can reset the simulation at any time with F1
+			selectionObject = nullptr;
+		}
+
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
+			InitCamera(); //F2 will reset the camera to a specific default place
+		}
+
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
+			useGravity = !useGravity; //Toggle gravity!
+			physics.UseGravity(useGravity);
+		}
+		//Running certain physics updates in a consistent order might cause some
+		//bias in the calculations - the same objects might keep 'winning' the constraint
+		//allowing the other one to stretch too much etc. Shuffling the order so that it
+		//is random every frame can help reduce such bias.
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
+			world.ShuffleConstraints(true);
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
+			world.ShuffleConstraints(false);
+		}
+
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
+			world.ShuffleObjects(true);
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
+			world.ShuffleObjects(false);
+		}
+
+		// Gravity status display
+		if (useGravity) {
+			Debug::Print("(G)ravity on", Vector2(5, 95), Debug::RED);
 		}
 		else {
-			pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
+			Debug::Print("(G)ravity off", Vector2(5, 95), Debug::RED);
 		}
-	}
 
-	// Coin Collection, iterate in reverse order
-	for (int i = coins.size() - 1; i >= 0; --i) {
-		GameObject* c = coins[i];
-
-		// make coin rotate
-		float rotationSpeed = 90.0f;
-		Quaternion rotation = Quaternion::AxisAngleToQuaterion(Vector3(0, 1, 0), rotationSpeed * dt);
-		Quaternion currentOri = c->GetTransform().GetOrientation();
-		c->GetTransform().SetOrientation(rotation* currentOri);
-
-		if (!c->IsActive()) continue;
-		// calculate distance to player
-		float player_dist = Vector::Length((player->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
-		float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
-		GameObject* playerHeld = player->GetHeldItem();
-		GameObject* rivalHeld = rival->GetHeldItem();
-		// collection radius 2.5f, need FragilePackage to collect
-		if (playerHeld) {
-			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
-				world.RemoveGameObject(c, true); // remove coin from world
-				packageObject->IncreaseCollectionCount(); // increase package collection count
-				coins.erase(coins.begin() + i); // remove coin from vector
+		world.OperateOnContents(
+			[dt](GameObject* o) {
+				o->Update(dt);
 			}
-		}
-		if (rivalHeld) {
-			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
-				world.RemoveGameObject(c, true); // remove coin from world
-				packageObject->IncreaseCollectionCount(); // increase package collection count
-				coins.erase(coins.begin() + i); // remove coin from vector
-			}
-		}
+		);
+		// Update physics and world
+		physics.Update(dt);
+		world.UpdateWorld(dt);
 	}
-
-	// Win Condition
-	if (!isGameWon && targetZone) {
-		Vector3 zonePos = targetZone->GetTransform().GetPosition();
-		Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
-
-		Vector3 pPos = player->GetTransform().GetPosition();
-
-		bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
-			pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
-
-		// score && inZone -> win
-		if (inZone && score >= winningScore) {
-			isGameWon = true;
-		}
-		// score is not enough
-		if (inZone && score < winningScore) {
-			Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
-		}
-	}
-	// Death Condition - hit by goose
-	if (!isGameOver && !isGameWon && player && goose) {
-		Vector3 pPos = player->GetTransform().GetPosition();
-		Vector3 gPos = goose->GetTransform().GetPosition();
-
-		// simple distance check, large than goose size
-		float dist = Vector::Length((pPos - gPos));
-		if (dist < 4.1f) {
-			isGameOver = true;
-		}
-	}
-
-	// Display score
-	std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
-	// score color change if reached winning score
-	Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1);
-	Debug::Print(scoreText, Vector2(75, 10), scoreColor);
-	std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
-	Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
-
-	//---------------------------------~o( > . <)o~---------------------------------//
-	// player object update
-	if (!inSelectionMode && player) {
-		player->Update(dt);
-	}
-	// package object update
-	if(packageObject) {
-		packageObject->Update(dt);
-	}
-
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
-		InitWorld(); //We can reset the simulation at any time with F1
-		selectionObject = nullptr;
-	}
-
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
-		InitCamera(); //F2 will reset the camera to a specific default place
-	}
-
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
-		useGravity = !useGravity; //Toggle gravity!
-		physics.UseGravity(useGravity);
-	}
-	//Running certain physics updates in a consistent order might cause some
-	//bias in the calculations - the same objects might keep 'winning' the constraint
-	//allowing the other one to stretch too much etc. Shuffling the order so that it
-	//is random every frame can help reduce such bias.
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
-		world.ShuffleConstraints(true);
-	}
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
-		world.ShuffleConstraints(false);
-	}
-
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
-		world.ShuffleObjects(true);
-	}
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
-		world.ShuffleObjects(false);
-	}
-
-	// Gravity status display
-	if (useGravity) {
-		Debug::Print("(G)ravity on", Vector2(5, 95), Debug::RED);
-	}
-	else {
-		Debug::Print("(G)ravity off", Vector2(5, 95), Debug::RED);
-	}
-
-	world.OperateOnContents(
-		[dt](GameObject* o) {
-			o->Update(dt);
-		}
-	);
-	// Update physics and world
-	physics.Update(dt);
-	world.UpdateWorld(dt);
 }
 
 void MyGame::InitCamera() {
@@ -366,12 +369,13 @@ void MyGame::InitWorld() {
 	world.ClearAndErase();
 	physics.Clear();
 	coins.clear();
-
+	players.clear();
 	score = 0;
 	isGameOver = false;
 	isGameWon = false;
-
+	// BUGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 	InitCourierLevel();
+	InitDefaultPlayer();
 }
 
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
@@ -467,7 +471,9 @@ GameObject* MyGame::AddCoinToWorld(const Vector3& position, Vector3 dimensions, 
 	return coin;
 }
 
-StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
+StateGameObject* MyGame::AddPatrolEnemyToWorld(const Vector3& position, const Vector3& patrolDestination) {
+	// Patroling enemy AI, if player is close, chase
+	// If reaches player, transport player back to start point
 	float meshSize = 3.0f;
 	float inverseMass = 0.0f;
 
@@ -479,6 +485,8 @@ StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 	character->GetTransform()
 		.SetScale(Vector3(meshSize, meshSize, meshSize))
 		.SetPosition(position);
+	character->SetResetPoint(position);
+	
 
 	character->SetRenderObject(new RenderObject(character->GetTransform(), enemyMesh, notexMaterial));
 	character->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red color ENEMY
@@ -490,6 +498,12 @@ StateGameObject* MyGame::AddEnemyToWorld(const Vector3& position) {
 
 	character->SetPhysicsObject(physicsObj);
 
+	// set patrol route
+	std::vector<Vector3> patrolPath;
+	patrolPath.push_back(position);
+	patrolPath.push_back(patrolDestination);
+	character->SetPatrolPath(patrolPath);
+
 	world.AddGameObject(character);
 
 	return character;
@@ -499,83 +513,99 @@ Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radi
 {
 	float inverseMass = 0.5f;
 
-	player = new Player(&world);
+	Player* newplayer = new Player(&world);
 	
 	SphereVolume* volume = new SphereVolume(radius * 0.5f); // set bounding volume
-	player->SetBoundingVolume(volume);
+	newplayer->SetBoundingVolume(volume);
 	
-	player->GetTransform() // set transform
+	newplayer->GetTransform() // set transform
 		.SetScale(Vector3(radius, radius, radius))
 		.SetPosition(position);
 
-	player->SetRenderObject(new RenderObject(player->GetTransform(), catMesh, notexMaterial));
-	player->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1)); // cyan
+	newplayer->SetRenderObject(new RenderObject(newplayer->GetTransform(), catMesh, notexMaterial));
+	newplayer->GetRenderObject()->SetColour(Vector4(0, 1, 1, 1)); // cyan
 
-	PhysicsObject* physicsObj = new PhysicsObject(player->GetTransform(), player->GetBoundingVolume()); // set physics object
+	PhysicsObject* physicsObj = new PhysicsObject(newplayer->GetTransform(), newplayer->GetBoundingVolume()); // set physics object
 	physicsObj->SetInverseMass(inverseMass);
 	physicsObj->InitSphereInertia();
 	physicsObj->SetElasticity(0.0f); // no bounciness
 
-	player->SetPhysicsObject(physicsObj);
+	newplayer->SetPhysicsObject(physicsObj);
 	
-	world.AddGameObject(player);
+	world.AddGameObject(newplayer);
 
-	return player;
+	return newplayer;
+}
+
+void MyGame::InitDefaultPlayer() {
+	Vector3 pos = Vector3(-60, 5, 60);
+	Player* p = AddPlayerToWorld(pos, 1.0f);
+
+	players.push_back(p); // add to players list
+
+	// set local player ID
+	localPlayerID = 0;
+
+	// set player reference as target for rival and goose
+	if (rival) rival->SetPlayer(p);
+	if (goose) goose->SetPlayer(p);
+	if (patrolEnemy) patrolEnemy->SetTarget(p);
+	p->SetFragilePackage(packageObject);
 }
 
 RivalAI* MyGame::AddRivalAIToWorld(const NCL::Maths::Vector3& position, float radius)
 {
 	float inverseMass = 0.5f;
 
-	rival = new RivalAI(&world, navGrid);
+	RivalAI* newRival = new RivalAI(&world, navGrid);
 
 	SphereVolume* volume = new SphereVolume(radius * 0.5f);
-	rival->SetBoundingVolume(volume);
+	newRival->SetBoundingVolume(volume);
 
-	rival->GetTransform()
+	newRival->GetTransform()
 		.SetScale(Vector3(radius, radius, radius))
 		.SetPosition(position);
 
-	rival->SetRenderObject(new RenderObject(rival->GetTransform(), catMesh, notexMaterial));
-	rival->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red
+	newRival->SetRenderObject(new RenderObject(newRival->GetTransform(), catMesh, notexMaterial));
+	newRival->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red
 
-	PhysicsObject* physicsObj = new PhysicsObject(rival->GetTransform(), rival->GetBoundingVolume());
+	PhysicsObject* physicsObj = new PhysicsObject(newRival->GetTransform(), newRival->GetBoundingVolume());
 	physicsObj->SetInverseMass(inverseMass);
 	physicsObj->InitSphereInertia();
 	physicsObj->SetElasticity(0.0f); // no bounciness
 
-	rival->SetPhysicsObject(physicsObj);
+	newRival->SetPhysicsObject(physicsObj);
 
-	world.AddGameObject(rival);
+	world.AddGameObject(newRival);
 
-	return rival;
+	return newRival;
 }
 
 GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position, float radius)
 {
 	float inverseMass = 0.5f;
 
-	GooseNPC* goose = new GooseNPC(navGrid, player); // init goose with navgrid and player reference
+	GooseNPC* newGoose = new GooseNPC(navGrid); // init goose with navgrid and player reference
 	SphereVolume* volume = new SphereVolume(radius);
-	goose->SetBoundingVolume(volume);
+	newGoose->SetBoundingVolume(volume);
 
-	goose->GetTransform()
+	newGoose->GetTransform()
 		.SetScale(Vector3(radius, radius, radius))
 		.SetPosition(position);
 
-	goose->SetRenderObject(new RenderObject(goose->GetTransform(), gooseMesh, notexMaterial));
-	goose->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red color goose
+	newGoose->SetRenderObject(new RenderObject(newGoose->GetTransform(), gooseMesh, notexMaterial));
+	newGoose->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red color goose
 
-	PhysicsObject* physicsObj = new PhysicsObject(goose->GetTransform(), goose->GetBoundingVolume());
+	PhysicsObject* physicsObj = new PhysicsObject(newGoose->GetTransform(), newGoose->GetBoundingVolume());
 
 	physicsObj->SetInverseMass(inverseMass);
 	physicsObj->InitSphereInertia();
 
-	goose->SetPhysicsObject(physicsObj);
+	newGoose->SetPhysicsObject(physicsObj);
 
-	world.AddGameObject(goose);
+	world.AddGameObject(newGoose);
 
-	return goose;
+	return newGoose;
 }
 
 void MyGame::BridgeConstraintTest() {
@@ -606,22 +636,23 @@ void MyGame::BridgeConstraintTest() {
 
 // Core Logic of Level Building
 void MyGame::InitCourierLevel() {
-
-	// Add player
-	player = AddPlayerToWorld(Vector3(-60, 5, 60), 1.0f);//cyan color
-	
 	// Add navGrid and AI
 	if (!navGrid) {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
 	rival = AddRivalAIToWorld(Vector3(-60, 5, 50), 1.0f); // red color
-	rival->SetPlayer(player);
+	rival->SetNetworkObject(new NetworkObject(*rival, 10)); //give rival a network object for syncing
 	goose = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
+	goose->SetNetworkObject(new NetworkObject(*goose, 11));
+
+	// Add Enemy that patrols and targets the player
+	patrolEnemy = AddPatrolEnemyToWorld(Vector3(20, 4, 20), Vector3(20, 4, -20));
+	patrolEnemy->SetGameWorld(&world);
 
 	// Add packageObject
 	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 5, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
+	packageObject->SetNetworkObject(new NetworkObject(*packageObject, 12));
 	world.AddGameObject(packageObject);
-	player->SetFragilePackage(packageObject);
 	rival->SetFragilePackage(packageObject);
 
 	// Add Sphere and CubeStone
@@ -666,18 +697,4 @@ void MyGame::InitCourierLevel() {
 	if (puzzleDoor && puzzleDoor->GetRenderObject()) {
 		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // blue
 	}
-
-	// Simple Enemy AI Setup
-	std::vector<Vector3> aiPath;
-	float pathY = 4.0f;
-	aiPath.push_back(Vector3(20, pathY, 20));
-	aiPath.push_back(Vector3(20, pathY, -20));
-	aiPath.push_back(Vector3(-20, pathY, -20));
-	aiPath.push_back(Vector3(-20, pathY, 20));
-	// Add Enemy (RED) that patrols and targets the player
-	StateGameObject* enemy = AddEnemyToWorld(Vector3(0, 5, 0));
-	enemy->SetPatrolPath(aiPath);
-	enemy->SetTarget(player);
-	enemy->SetGameWorld(&world);
-	enemy->SetResetPoint(Vector3(0, 5, 0));
 }

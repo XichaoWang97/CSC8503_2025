@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <thread>
 #include <atomic>
+//#include "enet/enet.h"
 
 namespace NCL {
 	namespace CSC8503 {
@@ -17,6 +18,7 @@ namespace NCL {
 			void SendPacket(GamePacket&  payload);
 
 			void UpdateClient();
+			//int GetPeerID() const { return netPeer ? netPeer->outgoingPeerID : -1; } // 
 		protected:	
 			_ENetPeer*	netPeer;
 		};

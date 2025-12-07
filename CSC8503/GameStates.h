@@ -194,22 +194,38 @@ namespace NCL {
 		public:
 			HostGameState(NetworkedGame* g)
 				: netGame(g) {
-				// 同样，不要在这里 new GameServer
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				Debug::Print("Server Setup", Vector2(30, 40), Debug::WHITE);
-				Debug::Print("Press SPACE to Start Server", Vector2(30, 55), Debug::WHITE);
-				Debug::Print("Press ESC to Cancel", Vector2(30, 60), Debug::WHITE);
+				Debug::Print("Server Setup", Vector2(30, 30), Debug::WHITE);
 
-				if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-					// 【关键修改】调用 NetworkedGame 的方法来启动服务器
-					netGame->StartAsServer();
+				// 提示用户输入人数
+				Debug::Print("Press 2 to Start 2-Player Game", Vector2(30, 45), Debug::WHITE);
+				Debug::Print("Press 3 to Start 3-Player Game", Vector2(30, 50), Debug::WHITE);
+				Debug::Print("Press 4 to Start 4-Player Game", Vector2(30, 55), Debug::WHITE);
 
-					// 进入游戏循环状态
+				Debug::Print("Press ESC to Cancel", Vector2(30, 65), Debug::WHITE);
+
+				// 检测按键并传入对应的人数
+				int playerCount = 0;
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM2)) {
+					playerCount = 2;
+				}
+				else if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM3)) {
+					playerCount = 3;
+				}
+				else if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM4)) {
+					playerCount = 4;
+				}
+
+				// 如果选择了人数，启动服务器
+				if (playerCount > 0) {
+					netGame->StartAsServer(playerCount); // 传入选择的人数
+
 					*newState = new NetworkedGameState(netGame);
 					return PushdownResult::Push;
 				}
+
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					return PushdownResult::Pop;
 				}

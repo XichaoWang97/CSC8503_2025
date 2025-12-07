@@ -30,11 +30,11 @@ void Player::PlayerControl(float dt) {
     float maxSpeed = 15.0f;
     float rotationSpeed = 10.0f;
 
-    // 1. 获取相机的视角
+	// get camera yaw
     float yaw = gameWorld->GetMainCamera().GetYaw();
     Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, yaw, 0);
 
-    // 2. 构建本地输入向量
+	// build input direction
     Vector3 inputDir(0, 0, 0);
     if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) inputDir.z -= 1;
     if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) inputDir.z += 1;
@@ -47,13 +47,13 @@ void Player::PlayerControl(float dt) {
         inputDir = Vector::Normalise(inputDir);
         Vector3 targetDir = cameraRot * inputDir;
 
-        // 4. 自动转向
+		// apply rotation towards movement direction
         Matrix4 lookAtMat = Matrix::View(Vector3(0, 0, 0), -targetDir, Vector3(0, 1, 0));
         Quaternion targetOrientation(Matrix::Inverse(lookAtMat));
 
         Quaternion currentOrientation = transform.GetOrientation();
 
-        // 四元数最短路径修正
+		// Ensure shortest path
         float dot = Quaternion::Dot(currentOrientation, targetOrientation);
         if (dot < 0.0f) {
             targetOrientation.x = -targetOrientation.x;
@@ -76,16 +76,16 @@ void Player::PlayerControl(float dt) {
         Vector3 playerDir = GetTransform().GetOrientation() * Vector3(0, 0, 1);
 
         if (GetHeldItem()) {
-            ThrowHeldItem(playerDir); // 有东西就扔
+			ThrowHeldItem(playerDir); // there is something, so throw
             actionCooldown = 0.5f;
         }
         else {
-            TryGrab(playerDir);       // 没东西就抓d
+			TryGrab(playerDir);       // nothing held, try grab
             actionCooldown = 0.5f;
         }
     }
 
-    // 6. 速度限制
+	// velocity limiting
     Vector3 velocity = phys->GetLinearVelocity();
     Vector3 planarVelocity(velocity.x, 0, velocity.z);
 
@@ -94,7 +94,7 @@ void Player::PlayerControl(float dt) {
         phys->SetLinearVelocity(Vector3(planarVelocity.x, velocity.y, planarVelocity.z));
     }
 
-    // 7. 刹车逻辑
+	// Damping when not moving
     if (!isMoving) {
         if (Vector::Length(planarVelocity) > 0.1f) {
             float dampingFactor = 5.0f;
@@ -102,9 +102,9 @@ void Player::PlayerControl(float dt) {
         }
     }
 
-    // 8. 跳跃
+    // jump
     if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-        if (IsPlayerOnGround()) { // 调用不带参数的版本
+        if (IsPlayerOnGround()) {
             phys->ApplyLinearImpulse(Vector3(0, 15, 0));
         }
     }

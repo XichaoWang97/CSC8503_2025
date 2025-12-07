@@ -15,15 +15,11 @@ namespace NCL::CSC8503 {
 		NetworkedGame(GameWorld& gameWorld, GameTechRendererInterface& renderer, PhysicsSystem& physics);
 		~NetworkedGame();
 
-		void StartAsServer();
+		void StartAsServer(int playerCount);
 		void StartAsClient(char a, char b, char c, char d);
 
 		void UpdateGame(float dt) override;
-
-		// 网络包接收回调
 		void ReceivePacket(int type, GamePacket* payload, int source) override;
-
-		// 处理玩家连接/断开
 		void OnPlayerCollision(NetworkPlayer* a, NetworkPlayer* b);
 
 	protected:
@@ -32,9 +28,10 @@ namespace NCL::CSC8503 {
 
 		void BroadcastSnapshot(bool deltaFrame);
 		void UpdateMinimumState();
+		void InitDefaultPlayer() override;
 
-		// 生成网络玩家
-		GameObject* SpawnPlayer(int playerID, bool isSelf = false);
+		// generate player object for a given client ID
+		GameObject* SpawnNetworkedPlayer(int playerID);
 		void ServerProcessClientInput(int playerID, ClientPacket* packet);
 
 		GameServer* thisServer;
@@ -42,8 +39,7 @@ namespace NCL::CSC8503 {
 		float timeToNextPacket;
 		int packetsToSnapshot;
 
-		std::map<int, int> stateIDs; // 记录每个客户端确认的最新状态ID
-		std::map<int, GameObject*> serverPlayers; // Server端: ClientID -> PlayerObject
-		GameObject* localPlayer; // Client端: 自己的玩家对象
+		std::map<int, int> stateIDs; // record last acknowledged state ID per client
+		std::map<int, GameObject*> serverPlayers; // ClientID -> PlayerObject
 	};
 }

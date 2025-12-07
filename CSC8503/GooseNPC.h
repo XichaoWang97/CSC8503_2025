@@ -9,10 +9,11 @@
 namespace NCL::CSC8503 {
     class GooseNPC : public StateGameObject {
     public:
-        GooseNPC(NavigationGrid* grid, GameObject* player);
+        GooseNPC(NavigationGrid* grid);
         ~GooseNPC();
 
         void Update(float dt) override;
+		void SetPlayer(GameObject* player) { playerTarget = player; }
 
     protected:
 		// Behaviour Tree
