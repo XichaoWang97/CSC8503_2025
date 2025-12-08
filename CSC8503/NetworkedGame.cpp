@@ -7,9 +7,21 @@
 #include "Window.h"
 #include "Matrix.h"
 #define COLLISION_MSG 30
+#define GLOBAL_STATE_MSG 50 
 
 using namespace NCL;
 using namespace CSC8503;
+
+struct GlobalStatePacket : public GamePacket {
+	int rivalScore;
+	int networkScore; // score of player
+	bool useGravity;
+
+	GlobalStatePacket() {
+		type = GLOBAL_STATE_MSG;
+		size = sizeof(GlobalStatePacket) - sizeof(GamePacket);
+	}
+};
 
 struct MessagePacket : public GamePacket {
 	short playerID;
@@ -36,12 +48,12 @@ NetworkedGame::~NetworkedGame() {
 }
 
 void NetworkedGame::StartAsServer(int playerCount) {
-	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 3);
+	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 1); // if you need more clients, change the number here
 	// 注册处理: 客户端发来的输入包 + 确认包
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Received_State, this);
 	InitWorld();
-
+	InitNetworkObjectToWorld();
 	// generate players
 	for (int i = 0; i < playerCount; ++i) {
 		GameObject* newPlayer = SpawnNetworkedPlayer(i);
@@ -73,12 +85,12 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Full_State, this);
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Player_Connected, this);
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Player_Disconnected, this);
+	thisClient->RegisterPacketHandler(GLOBAL_STATE_MSG, this);
 
 	InitWorld();
+	InitNetworkObjectToWorld();
 
-	// 【核心逻辑】客户端也初始化容器
-	// 按照你的要求：根据数字初始化 Vector。这里为了测试，假设我们也是 2 人房
-	// 实际应用中，应该由服务器发包告知 "TotalPlayers"
+	// 【核心逻辑】客户端也初始化容器, 根据数字初始化 Vector。这里为了测试，假设我们也是 2 人房
 	int estimatedPlayers = 2;
 
 	for (int i = 0; i < estimatedPlayers; ++i) {
@@ -128,6 +140,24 @@ void NetworkedGame::UpdateGame(float dt) {
 
 // Server Logic
 void NetworkedGame::UpdateAsServer(float dt) {
+	// 1. 服务器独占的重力控制逻辑
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
+		useGravity = !useGravity;
+		physics.UseGravity(useGravity);
+	}
+
+	// 2. 组装全局状态包 (每一帧或每隔几帧发送一次，看你需求)
+	// 这里为了简单，我们把它放在 Snapshot 的逻辑里一起发，或者单独发
+	GlobalStatePacket statePacket;
+	statePacket.useGravity = useGravity;
+
+	// 同步分数 (解决 Rival 得分不对的问题)
+	if (rival) statePacket.rivalScore = rival->GetScore();
+	// 假设我们只同步 package 的收集数作为分数
+	if (packageObject) statePacket.networkScore = packageObject->GetCollectionCount();
+
+	thisServer->SendGlobalPacket(statePacket);
+
 	// send snap shot
 	packetsToSnapshot--;
 	if (packetsToSnapshot < 0) {
@@ -160,7 +190,6 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (thisServer) {
-		std::cout << "Server_!!!!!!!!!!!" << std::endl;
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
 			// Server 收到 Client 的输入 -> 控制对应的 Player
@@ -178,7 +207,6 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 	}
 	else if (thisClient) {
-		std::cout << "Client_!!!!!!!!!!!" << std::endl;
 		switch (type) {
 		case BasicNetworkMessages::Full_State:
 		case BasicNetworkMessages::Delta_State: {
@@ -199,6 +227,30 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			}
 			break;
 		}
+		}
+	}
+
+	if (type == GLOBAL_STATE_MSG) {
+		GlobalStatePacket* packet = (GlobalStatePacket*)payload;
+
+		// 1. 同步重力
+		if (this->useGravity != packet->useGravity) {
+			this->useGravity = packet->useGravity;
+			physics.UseGravity(this->useGravity);
+			std::cout << "Gravity Synced: " << (this->useGravity ? "ON" : "OFF") << std::endl;
+		}
+
+		// 2. 同步分数 (解决 Rival 和 玩家分数显示问题)
+		if (rival) rival->SetScore(packet->rivalScore);
+
+		// 你的 MyGame 里 score 是成员变量
+		this->score = packet->networkScore;
+
+		// 还需要强制同步 Package 的内部计数，否则 MyGame::Update 可能又把它改回去
+		if (packageObject) {
+			// 这是一个 Hack，最好是在 FragileGameObject 里加个 SetCollectionCount
+			// 但由于 score = packageObject->GetCollectionCount()，我们直接改 UI 显示的 score 即可
+			// 如果逻辑强依赖 packageObject，你需要去 FragileGameObject 加 setter
 		}
 	}
 }
@@ -258,40 +310,48 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	newPacket.buttonstates[1] = 0;
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
+	// ================= [新增/修改部分 START] =================
 
-	thisClient->SendPacket(newPacket);
+	// 核心逻辑：除了发包给服务器，也要把这个输入应用到本地的 Player 身上，
+	// 这样本地 Player 才会执行射线检测和 DrawLine。
 
-	// ---------------------- 【新增】同步画面逻辑 ----------------------
-	// 遍历所有物体，如果它有 NetworkObject，就把它“瞬移”到服务器发来的最新位置
+	// 1. 获取本地玩家对象
+	if (localPlayerID >= 0 && localPlayerID < players.size()) {
+		Player* localPlayer = players[localPlayerID];
 
-	// 获取当前客户端的 NetworkObject 列表
-	/*std::vector<GameObject*>::const_iterator first;
-	std::vector<GameObject*>::const_iterator last;
-	world.GetObjectIterators(first, last);
+		if (localPlayer) {
+			// 2. 构造本地 Input 结构 (模仿 ServerProcessClientInput 的逻辑)
+			PlayerInputs inputs;
 
-	for (auto i = first; i != last; ++i) {
-		NetworkObject* o = (*i)->GetNetworkObject();
-		if (!o) continue;
+			// 设置朝向 (射线方向依赖于此)
+			inputs.cameraYaw = world.GetMainCamera().GetYaw();
 
-		// 这里需要用到插值(Interpolation)或者直接覆盖(Snap)。
-		// 为了先解决“不动”的问题，我们先用最简单的“直接覆盖 (Snap to latest)”。
+			// 设置按键状态
+			if (newPacket.buttonstates[0] > 0) inputs.jump = true;
+			if (newPacket.buttonstates[1] > 0) inputs.attack = true; // 主要是这个触发交互/射线
 
-		// 注意：你需要确保 NetworkObject 类中有 GetLatestNetworkState() 方法
-		// 如果你的 NCL 框架中 NetworkObject 没有这个方法，通常它是通过 stateHistory 获取的
-		// 下面是一个通用的 NCL 框架获取最新状态的写法：
+			// 3. 关键点：处理 IgnoreInput
+			// 在 StartAsClient 中，为了防止客户端物理和服务器打架，通常设置了 SetIgnoreInput(true)。
+			// 如果 Player::Update 里面第一行就是 if(ignoreInput) return; 那么即使设置了 Input 也没用。
+			// 解决方法是：临时允许处理 Input，或者确保你的 Player 逻辑分开了移动和交互。
 
-		Transform& transform = (*i)->GetTransform();
+			bool wasIgnoring = localPlayer->GetIgnoreInput(); // 假设你有这个 getter，或者直接手动控制
 
-		// 尝试获取最新的网络状态并应用
-		// 假设 NetworkObject 内部维护了一个 stateHistory 或者 lastFullState
-		// 因为我看不到 NetworkObject.h，通常做法如下：
+			// 强制允许输入处理一帧 (为了触发射线视觉效果)
+			// 注意：这可能会导致客户端有一瞬间的物理预测抖动，但对于射线交互通常是可以接受的
+			localPlayer->SetIgnoreInput(false);
 
-		NetworkState lastState;
-		if (o->GetLatestNetworkState(lastState)) { // 这一步从 NetworkObject 取出最新收到的包
-			transform.SetPosition(lastState.position);
-			transform.SetOrientation(lastState.orientation);
+			localPlayer->SetPlayerInput(inputs);
+
+			// 如果你的 Player::Update 是在 NetworkedGame::UpdateGame 里统一调用的，
+			// 这里设置完 Input 后，等到 Update 循环到它时就会自动画线了。
+
+			// 如果不想干扰物理移动，可以在 Update 之后把 Ignore 设回去，
+			// 但通常简单的做法是保持 False，但把 InverseMass 设为 0 (你代码里已经做了)，这样就不会被物理推走。
 		}
-	}*/
+	}
+	// ================= [新增/修改部分 END] =================
+	thisClient->SendPacket(newPacket);
 }
 
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {
@@ -347,4 +407,59 @@ void NetworkedGame::UpdateMinimumState() {
 // This is an empty function to disable the default single-player player creation
 void NetworkedGame::InitDefaultPlayer() {
 	// Do Nothing.
+}
+
+void NetworkedGame::InitNetworkObjectToWorld() {
+	// we assume 0-4 to player
+	// start to allocate from 5
+	rival->SetNetworkObject(new NetworkObject(*rival, 5));
+	goose->SetNetworkObject(new NetworkObject(*goose, 6));
+	patrolEnemy->SetNetworkObject(new NetworkObject(*patrolEnemy, 7));
+	packageObject->SetNetworkObject(new NetworkObject(*packageObject, 8));;
+
+	int idCounter = 10;
+	// allocate numbers to coins
+	for (auto& coin : coins) {
+		if (!coin->GetNetworkObject()) {
+			coin->SetNetworkObject(new NetworkObject(*coin, idCounter++));
+		}
+	}
+
+	// allocate to stones and cube stones
+	world.OperateOnContents([&](GameObject* o) {
+		// check objects by name
+		if (o->GetName() == "Stone" || o->GetName() == "CubeStone") {
+			if (!o->GetNetworkObject()) {
+				o->SetNetworkObject(new NetworkObject(*o, idCounter++));
+			}
+		}
+	});
+}
+
+void NetworkedGame::UpdateKeys() {
+	if (thisServer) {
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
+			useGravity = !useGravity;
+			physics.UseGravity(useGravity);
+
+			// inform others
+			std::cout << "Server toggled gravity!" << std::endl;
+
+			GlobalStatePacket statePacket;
+			statePacket.useGravity = useGravity;
+			statePacket.rivalScore = rival ? rival->GetScore() : 0;
+			statePacket.networkScore = packageObject ? packageObject->GetCollectionCount() : 0;
+
+			thisServer->SendGlobalPacket(statePacket);
+		}
+	}
+	else if (thisClient) {
+		// 【关键】客户端这里留空！
+		// 意味着：客户端按 G 键没有任何反应。
+		// 只有等到 Server 发来 GlobalStatePacket，ReceivePacket 函数被触发时，重力才会变。
+	}
+	// 情况C：既不是Client也不是Server（防御性代码，理论上不会发生）
+	else {
+		MyGame::UpdateKeys();
+	}
 }

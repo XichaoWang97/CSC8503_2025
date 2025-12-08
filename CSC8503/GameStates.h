@@ -198,29 +198,18 @@ namespace NCL {
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
 				Debug::Print("Server Setup", Vector2(30, 30), Debug::WHITE);
-
-				// 提示用户输入人数
 				Debug::Print("Press 2 to Start 2-Player Game", Vector2(30, 45), Debug::WHITE);
-				Debug::Print("Press 3 to Start 3-Player Game", Vector2(30, 50), Debug::WHITE);
-				Debug::Print("Press 4 to Start 4-Player Game", Vector2(30, 55), Debug::WHITE);
-
 				Debug::Print("Press ESC to Cancel", Vector2(30, 65), Debug::WHITE);
 
-				// 检测按键并传入对应的人数
 				int playerCount = 0;
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM2)) {
 					playerCount = 2;
 				}
-				else if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM3)) {
-					playerCount = 3;
-				}
-				else if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM4)) {
-					playerCount = 4;
-				}
-
-				// 如果选择了人数，启动服务器
+				// we can expand more players here...
+				// if we expand more players, we should also change the StartAsServer functions in NetworkedGame.cpp
+				// start as server
 				if (playerCount > 0) {
-					netGame->StartAsServer(playerCount); // 传入选择的人数
+					netGame->StartAsServer(playerCount);
 
 					*newState = new NetworkedGameState(netGame);
 					return PushdownResult::Push;

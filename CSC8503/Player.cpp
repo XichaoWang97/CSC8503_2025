@@ -12,6 +12,8 @@ Player::~Player() {
 }
 
 void Player::Update(float dt) {
+    if (isDead) return; // if player is dead, he can not do anything
+
     if (actionCooldown > 0.0f) {
         actionCooldown -= dt;
     }
@@ -123,6 +125,7 @@ void Player::PlayerControl(float dt) {
     if (currentInputs.jump) {
         if (IsPlayerOnGround()) {
             phys->ApplyLinearImpulse(Vector3(0, 15, 0));
+            currentInputs.jump = false;
         }
     }
 }

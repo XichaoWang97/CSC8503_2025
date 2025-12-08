@@ -25,6 +25,7 @@ namespace NCL::CSC8503 {
 		// AI add/get score
         void SetScore(int amount) { currentScore = amount; }
         int  GetScore() const { return currentScore; }
+        void SetWinningScore(int amount) { rivalWinningScore = amount; }
 
     protected:
         void BuildBehaviourTree();
@@ -65,7 +66,7 @@ namespace NCL::CSC8503 {
         std::vector<Vector3> pathPoints;
 
         int currentScore;
-        int winningScore;
+        int rivalWinningScore;
         float moveSpeed;
 
 		bool IsOnGround();

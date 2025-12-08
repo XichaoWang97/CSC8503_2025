@@ -23,6 +23,12 @@ namespace NCL {
 		class GameObject;
 		class PositionConstraint;
 
+		enum class GameOverReason {
+			None,
+			GooseCatch, // catched by goose
+			RivalWin    // rival win
+		};
+
 		class MyGame {
 		public:
 			MyGame(GameWorld& gameWorld, GameTechRendererInterface& renderer, PhysicsSystem& physics);
@@ -49,11 +55,14 @@ namespace NCL {
 				return nullptr;
 			}
 
+			GameOverReason GetGameOverReason() const { return gameOverReason; }
+
 		protected:
 			void InitCamera();
 			void InitWorld();
 			void InitCourierLevel();
 			virtual void InitDefaultPlayer();
+			virtual void UpdateKeys();
 
 			// Add specific game objects to the world
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
@@ -74,7 +83,7 @@ namespace NCL {
 			void RivalLogic();
 
 			// pointers to specific game objects
-			GameObject* targetZone = nullptr;  // destination
+			GameObject* winZone = nullptr;  // destination
 			GameObject* puzzleDoor = nullptr;
 			GameObject* pressurePlate = nullptr;
 			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
@@ -93,13 +102,15 @@ namespace NCL {
 			int scoreInPackage = 0; // coins collected while carrying package
 			const int winningScore = 3; // score needed to win
 			std::vector<GameObject*> coins; // coin list
+
 			// win or lose
 			bool isGameOver = false;
 			bool isGameWon = false;
+			GameOverReason gameOverReason = GameOverReason::None;
+
 			// for navigation and pathfinding
 			NavigationGrid* navGrid = nullptr;
 			
-
 			GameWorld& world;
 			GameTechRendererInterface& renderer;
 			PhysicsSystem& physics;
@@ -128,10 +139,6 @@ namespace NCL {
 			GameTechMaterial checkerMaterial;
 			GameTechMaterial glassMaterial;
 			GameTechMaterial notexMaterial;
-
-			GameObject* objClosest = nullptr;
-
-			//void BridgeConstraintTest();
 		};
 	}
 }

@@ -16,7 +16,7 @@ RivalAI::RivalAI(GameWorld* world, NavigationGrid* _grid) : GameCharacter("Rival
 
     moveSpeed = 10.0f;
     currentScore = 0;
-    winningScore = 3; // 假设收集3个就赢
+    rivalWinningScore = 0;
     packageSpawnPos = Vector3(0, 0, 0); // 默认，需外部Set
     timeSinceLastPathCalc = 0.0f;
     BuildBehaviourTree();
@@ -143,7 +143,7 @@ void RivalAI::CalculatePath(Vector3 targetPos) {
 // Conditions: score and holding states
 
 BehaviourState RivalAI::HasHighScore(float dt) {
-    return (currentScore >= winningScore) ? Success : Failure;
+    return (currentScore >= rivalWinningScore) ? Success : Failure;
 }
 
 BehaviourState RivalAI::IsHoldingPackage(float dt) {
@@ -184,9 +184,9 @@ BehaviourState RivalAI::DoesPlayerHavePackage(float dt) {
 // Actions
 
 BehaviourState RivalAI::FindWinZone(float dt) {
-    GameObject* winZone = FindClosestObject("WinZone");
-    if (exitPoint) {
-        currentTarget = exitPoint;
+    GameObject* winZone = FindClosestObject("winZone");
+    if (winZone) {
+        currentTarget = winZone;
         return Success;
     }
     return Failure;
@@ -231,6 +231,9 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
     if (currentTarget) {
         if (!currentTarget->IsActive()) return Failure;
         targetPos = currentTarget->GetTransform().GetPosition();
+        if (currentTarget->GetName() == "WinZone") {
+            targetPos.y += 1.5f; // we should set it a little higher to make sure rival is standing on it
+        }
     }
     else {
 		targetPos = packageSpawnPos; // if no target, go to camp point(start position of package)

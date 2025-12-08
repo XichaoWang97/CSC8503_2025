@@ -23,12 +23,16 @@ namespace NCL::CSC8503 {
 
         void Update(float dt) override;
         void SetIgnoreInput(bool ignore) { ignoreInput = ignore; } // We should ignore input in NetworkedGame Mode
+        bool GetIgnoreInput() { return ignoreInput; }
         void SetPlayerInput(const PlayerInputs& inputs) { currentInputs = inputs; } // for networked game
+        bool IsDead() const { return isDead; }
+        void SetDead(bool dead) { isDead = dead; }
 
     private:
         virtual void PlayerControl(float dt);
         bool IsPlayerOnGround();
         bool ignoreInput = false;
+        bool isDead = false;
         PlayerInputs currentInputs;
     };
 }

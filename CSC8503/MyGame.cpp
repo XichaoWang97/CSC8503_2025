@@ -32,7 +32,9 @@ MyGame::MyGame(GameWorld& inWorld, GameTechRendererInterface& inRenderer, Physic
 {
 
 	forceMagnitude = 10.0f;
-	useGravity = false;
+	useGravity = true;
+	physics.UseGravity(useGravity);
+
 	inSelectionMode = false;
 
 	controller = new KeyboardMouseController(*Window::GetWindow()->GetKeyboard(), *Window::GetWindow()->GetMouse());
@@ -116,6 +118,7 @@ void MyGame::UpdateGame(float dt) {
 		}
 
 		RivalLogic();
+
 		// Display score
 		std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
 		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1); // score color change
@@ -123,31 +126,8 @@ void MyGame::UpdateGame(float dt) {
 		std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
 		Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
 
-		// ---~o( > . <)o~---Original Code---~o(> . < )o~---
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
-			InitWorld(); //We can reset the simulation at any time with F1
-			selectionObject = nullptr;
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
-			InitCamera(); //F2 will reset the camera to a specific default place
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
-			useGravity = !useGravity; //Toggle gravity!
-			physics.UseGravity(useGravity);
-		}
-
-		/*if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
-			world.ShuffleConstraints(true);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
-			world.ShuffleConstraints(false);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
-			world.ShuffleObjects(true);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
-			world.ShuffleObjects(false);
-		}*/
+		// Update Keys
+		UpdateKeys();
 
 		// Gravity status display
 		if (useGravity) {
@@ -167,6 +147,36 @@ void MyGame::UpdateGame(float dt) {
 		physics.Update(dt);
 		world.UpdateWorld(dt);
 	}
+}
+
+void MyGame::UpdateKeys() {
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
+			InitWorld(); //We can reset the simulation at any time with F1
+			selectionObject = nullptr;
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
+			InitCamera(); //F2 will reset the camera to a specific default place
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
+			useGravity = !useGravity; //Toggle gravity!
+			physics.UseGravity(useGravity);
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
+			world.ShuffleConstraints(true);
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
+			world.ShuffleConstraints(false);
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
+			world.ShuffleObjects(true);
+		}
+		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
+			world.ShuffleObjects(false);
+		}
+	}
+
+	// 如果有其他单机按键（如 F1, F2 等）也可以放这里
 }
 
 void MyGame::InitCamera() {
@@ -385,6 +395,8 @@ RivalAI* MyGame::AddRivalAIToWorld(const NCL::Maths::Vector3& position, float ra
 
 	newRival->SetPhysicsObject(physicsObj);
 
+	newRival->SetWinningScore(winningScore); // set rival winning condition
+
 	world.AddGameObject(newRival);
 
 	return newRival;
@@ -416,32 +428,6 @@ GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position, float radius)
 
 	return newGoose;
 }
-
-/*void MyGame::BridgeConstraintTest() {
-	Vector3 cubeSize = Vector3(8, 8, 8);
-
-	float invCubeMass = 5; // how heavy the middle pieces are
-	int numLinks = 10;
-	float maxDistance = 30; // constraint distance
-	float cubeDistance = 20; // distance between links
-
-	Vector3 startPos = Vector3(500, 500, 500);
-
-	GameObject* start = AddCubeToWorld(startPos + Vector3(0, 0, 0), cubeSize, 0);
-	GameObject* end = AddCubeToWorld(startPos + Vector3((numLinks + 2) * cubeDistance, 0, 0), cubeSize, 0);
-
-	GameObject* previous = start;
-
-	for (int i = 0; i < numLinks; ++i) {
-		GameObject* block = AddCubeToWorld(startPos + Vector3((i + 1) * cubeDistance, 0, 0), cubeSize, invCubeMass);
-		PositionConstraint* constraint = new PositionConstraint(previous, block, maxDistance);
-		world.AddConstraint(constraint);
-		previous = block;
-	}
-
-	PositionConstraint* constraint = new PositionConstraint(previous, end, maxDistance);
-	world.AddConstraint(constraint);
-}*/
 
 // Game logic functions
 
@@ -570,14 +556,14 @@ void MyGame::PackageLogic(Player* player, float dt) {
 
 void MyGame::WinLoseLogic(Player* player){
 	// Win Condition
-	if (!isGameWon && targetZone) {
-		Vector3 zonePos = targetZone->GetTransform().GetPosition();
+	if (!isGameWon && winZone) {
+		Vector3 zonePos = winZone->GetTransform().GetPosition();
 		Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
 
-		Vector3 pPos = player->GetTransform().GetPosition();
+		Vector3 PackagePos = packageObject->GetTransform().GetPosition();
 
-		bool inZone = (pPos.x > zonePos.x - zoneSize.x && pPos.x < zonePos.x + zoneSize.x &&
-			pPos.z > zonePos.z - zoneSize.z && pPos.z < zonePos.z + zoneSize.z);
+		bool inZone = (PackagePos.x > zonePos.x - zoneSize.x && PackagePos.x < zonePos.x + zoneSize.x &&
+			PackagePos.z > zonePos.z - zoneSize.z && PackagePos.z < zonePos.z + zoneSize.z);
 
 		// score && inZone -> win
 		if (inZone && score >= winningScore) {
@@ -586,6 +572,10 @@ void MyGame::WinLoseLogic(Player* player){
 		// score is not enough
 		if (inZone && score < winningScore) {
 			Debug::Print("Need more coins!", Vector2(40, 40), Vector4(1, 0, 0, 1));
+		}
+		// Lose
+		if (inZone && rival->GetScore() >= winningScore) {
+			isGameOver = true;
 		}
 	}
 	// Death Condition - hit by goose
@@ -596,7 +586,9 @@ void MyGame::WinLoseLogic(Player* player){
 		// simple distance check, large than goose size
 		float dist = Vector::Length((pPos - gPos));
 		if (dist < 4.1f) {
-			isGameOver = true;
+			isGameOver = true;// player die
+			// if all player die
+			// isGameover = true
 		}
 	}
 }
@@ -638,11 +630,7 @@ void MyGame::InitCourierLevel() {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
 	rival = AddRivalAIToWorld(Vector3(-60, 5, 50), 1.0f); // red color
-	rival->SetNetworkObject(new NetworkObject(*rival, 10)); //give rival a network object for syncing
-
-
 	goose = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
-	goose->SetNetworkObject(new NetworkObject(*goose, 11));
 
 	// Add Enemy that patrols and targets the player
 	patrolEnemy = AddPatrolEnemyToWorld(Vector3(20, 4, 20), Vector3(20, 4, -20));
@@ -650,7 +638,7 @@ void MyGame::InitCourierLevel() {
 
 	// Add packageObject
 	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 5, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
-	packageObject->SetNetworkObject(new NetworkObject(*packageObject, 12));
+	
 	world.AddGameObject(packageObject);
 	rival->SetFragilePackage(packageObject);
 
@@ -681,9 +669,9 @@ void MyGame::InitCourierLevel() {
 
 	// Destination zone, green area, now it is static
 	Vector3 targetPos = Vector3(60, 1, -60);
-	targetZone = AddCubeToWorld(targetPos, Vector3(10, 0.5f, 10), 0.0f);
-	if (targetZone && targetZone->GetRenderObject()) {
-		targetZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // set green with some transparency
+	winZone = AddCubeToWorld(targetPos, Vector3(10, 0.5f, 10), 0.0f, "winZone");
+	if (winZone && winZone->GetRenderObject()) {
+		winZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // set green with some transparency
 	}
 
 	// Pressure plate

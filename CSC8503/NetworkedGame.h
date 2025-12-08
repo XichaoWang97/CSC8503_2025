@@ -29,6 +29,8 @@ namespace NCL::CSC8503 {
 		void BroadcastSnapshot(bool deltaFrame);
 		void UpdateMinimumState();
 		void InitDefaultPlayer() override;
+		void InitNetworkObjectToWorld(); // dietribute network object
+		void UpdateKeys() override;
 
 		// generate player object for a given client ID
 		GameObject* SpawnNetworkedPlayer(int playerID);
