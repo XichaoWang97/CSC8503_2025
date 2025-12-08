@@ -36,7 +36,7 @@ NetworkedGame::~NetworkedGame() {
 }
 
 void NetworkedGame::StartAsServer(int playerCount) {
-	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 4);
+	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 3);
 	// 注册处理: 客户端发来的输入包 + 确认包
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Received_State, this);
@@ -108,12 +108,11 @@ void NetworkedGame::UpdateGame(float dt) {
 	// 1. 客户端逻辑：每帧都运行，确保不漏掉按键
 	if (thisClient) {
 		UpdateAsClient(dt);
-		// 这一步发送包，如果觉得发包太频繁(60Hz)，可以在 UpdateAsClient 内部加计时器
-		// 但对于课程作业，每帧发包通常是带来最流畅手感的简单做法。
 	}
 
 	// 2. 服务器逻辑：依然保持 20Hz (因为这是发送大量快照，太频繁会卡死)
-	if (timeToNextPacket < 0) {
+	timeToNextPacket -= dt;
+	if (timeToNextPacket <= 0.0f) {
 		if (thisServer) {
 			UpdateAsServer(dt);
 		}
@@ -129,7 +128,7 @@ void NetworkedGame::UpdateGame(float dt) {
 
 // Server Logic
 void NetworkedGame::UpdateAsServer(float dt) {
-	// 发送快照
+	// send snap shot
 	packetsToSnapshot--;
 	if (packetsToSnapshot < 0) {
 		BroadcastSnapshot(false);
@@ -148,10 +147,8 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 
 	for (auto i = first; i != last; ++i) {
 		NetworkObject* o = (*i)->GetNetworkObject();
-		if (!o) {
-			continue;
-		}
-
+		if (!o) continue;
+		std::cout << "Server sending packet for object ID: " << o->GetNetworkID() << std::endl;
 		int playerState = 0;
 		GamePacket* newPacket = nullptr;
 		if (o->WritePacket(&newPacket, deltaFrame, playerState)) {
@@ -163,7 +160,7 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (thisServer) {
-		std::cout << "1_!!!!!!!!!!!" << std::endl;
+		std::cout << "Server_!!!!!!!!!!!" << std::endl;
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
 			// Server 收到 Client 的输入 -> 控制对应的 Player
@@ -175,13 +172,13 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			// 如果有问题，可以用 map<int source, int playerIndex> 来映射
 			int playerIndex = source + 1;
 			// 暂时假定 source 1 就是 Player 1
-			std::cout << "Packet Source: " << source << " -> Controlling Player Index: " << playerIndex << "2_!!!!!!!!!!!" << std::endl;
 			ServerProcessClientInput(playerIndex, (ClientPacket*)payload);
 			break;
 		}
 		}
 	}
 	else if (thisClient) {
+		std::cout << "Client_!!!!!!!!!!!" << std::endl;
 		switch (type) {
 		case BasicNetworkMessages::Full_State:
 		case BasicNetworkMessages::Delta_State: {
@@ -243,7 +240,6 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	int right = 0;
 
 	// 这里的逻辑必须和 Server 解析的逻辑对应
-	// Server 解析：axis[0] 是 Z (前后)，axis[1] 是 X (左右)
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100; // Z-
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100; // Z+
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;   // X-
@@ -255,7 +251,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	// 发送 Yaw，这样服务器才能知道你面朝哪里
 	newPacket.yaw = world.GetMainCamera().GetYaw();
 
-	newPacket.lastID = 0; // 暂时不用
+	newPacket.lastID = 0;
 
 	// 按键状态
 	newPacket.buttonstates[0] = 0;
@@ -264,6 +260,38 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 
 	thisClient->SendPacket(newPacket);
+
+	// ---------------------- 【新增】同步画面逻辑 ----------------------
+	// 遍历所有物体，如果它有 NetworkObject，就把它“瞬移”到服务器发来的最新位置
+
+	// 获取当前客户端的 NetworkObject 列表
+	/*std::vector<GameObject*>::const_iterator first;
+	std::vector<GameObject*>::const_iterator last;
+	world.GetObjectIterators(first, last);
+
+	for (auto i = first; i != last; ++i) {
+		NetworkObject* o = (*i)->GetNetworkObject();
+		if (!o) continue;
+
+		// 这里需要用到插值(Interpolation)或者直接覆盖(Snap)。
+		// 为了先解决“不动”的问题，我们先用最简单的“直接覆盖 (Snap to latest)”。
+
+		// 注意：你需要确保 NetworkObject 类中有 GetLatestNetworkState() 方法
+		// 如果你的 NCL 框架中 NetworkObject 没有这个方法，通常它是通过 stateHistory 获取的
+		// 下面是一个通用的 NCL 框架获取最新状态的写法：
+
+		Transform& transform = (*i)->GetTransform();
+
+		// 尝试获取最新的网络状态并应用
+		// 假设 NetworkObject 内部维护了一个 stateHistory 或者 lastFullState
+		// 因为我看不到 NetworkObject.h，通常做法如下：
+
+		NetworkState lastState;
+		if (o->GetLatestNetworkState(lastState)) { // 这一步从 NetworkObject 取出最新收到的包
+			transform.SetPosition(lastState.position);
+			transform.SetOrientation(lastState.orientation);
+		}
+	}*/
 }
 
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {

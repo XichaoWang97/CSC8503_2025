@@ -78,7 +78,6 @@ namespace NCL::CSC8503 {
 		int GetNetworkID() { return networkID; }
 
 	protected:
-
 		NetworkState& GetLatestNetworkState();
 
 		bool GetNetworkState(int frameID, NetworkState& state);
