@@ -17,9 +17,19 @@ struct GlobalStatePacket : public GamePacket {
 	int networkScore; // score of player
 	bool useGravity;
 
+	// states
+	bool p2Connected;
+	bool p1Dead;
+	bool p2Dead;
+	int  gameOverReason;
+
 	GlobalStatePacket() {
 		type = GLOBAL_STATE_MSG;
 		size = sizeof(GlobalStatePacket) - sizeof(GamePacket);
+		p2Connected = false;
+		p1Dead = false;
+		p2Dead = false;
+		gameOverReason = 0;
 	}
 };
 
@@ -48,12 +58,17 @@ NetworkedGame::~NetworkedGame() {
 }
 
 void NetworkedGame::StartAsServer(int playerCount) {
+	Disconnect();
 	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 1); // if you need more clients, change the number here
 	// 注册处理: 客户端发来的输入包 + 确认包
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Received_State, this);
+	thisServer->RegisterPacketHandler(BasicNetworkMessages::Player_Connected, this);
+
 	InitWorld();
 	InitNetworkObjectToWorld();
+
+	isP2ConnectedServer = false;
 	// generate players
 	for (int i = 0; i < playerCount; ++i) {
 		GameObject* newPlayer = SpawnNetworkedPlayer(i);
@@ -76,6 +91,7 @@ void NetworkedGame::StartAsServer(int playerCount) {
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
+	Disconnect();
 	thisClient = new GameClient();
 	if (thisClient->Connect(a, b, c, d, NetworkBase::GetDefaultPort())) {
 		std::cout << "Connected to Server!" << std::endl;
@@ -136,6 +152,7 @@ void NetworkedGame::UpdateGame(float dt) {
 	if (thisClient) thisClient->UpdateClient();
 
 	MyGame::UpdateGame(dt);
+	DrawNetworkHUD();
 }
 
 // Server Logic
@@ -144,6 +161,50 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
 		useGravity = !useGravity;
 		physics.UseGravity(useGravity);
+	}
+
+	bool p1IsDead = false;
+	bool p2IsDead = false;
+	bool p2IsConnected = isP2ConnectedServer;
+
+	if (goose) {
+		Vector3 goosePos = goose->GetTransform().GetPosition();
+
+		// 检查 P1 (Server)
+		if (!players.empty() && players[0]) {
+			if (Vector::Length(players[0]->GetTransform().GetPosition() - goosePos) < 4.0f) {
+				players[0]->SetDead(true);
+			}
+			p1IsDead = players[0]->IsDead();
+		}
+
+		// 检查 P2 (Client)
+		if (players.size() > 1 && players[1] && p2IsConnected) {
+			if (Vector::Length(players[1]->GetTransform().GetPosition() - goosePos) < 4.0f) {
+				players[1]->SetDead(true);
+			}
+			p2IsDead = players[1]->IsDead();
+		}
+	}
+
+	// 判断游戏失败条件
+	// 1. 所有玩家都死了
+	bool allPlayersDead = p1IsDead && (p2IsConnected ? p2IsDead : true); // 如果P2没连，P1死即全死
+
+	// 2. Rival 赢了 (分数达标 且 在终点) - 这部分逻辑保留你 MyGame 原有的判定，这里只做同步
+	// 为了简化，这里直接检查 isGameOver 标记（需要确保 MyGame 里 Rival 胜利会设 isGameOver）
+	if (rival && rival->GetScore() >= winningScore) {
+		// 这里做一个简单判定，假设 Rival 总是能进终点
+		gameOverReason = GameOverReason::RivalWin;
+		isGameOver = true;
+	}
+	else if (allPlayersDead) {
+		gameOverReason = GameOverReason::GooseCatch;
+		isGameOver = true;
+	}
+	else {
+		gameOverReason = GameOverReason::None;
+		isGameOver = false;
 	}
 
 	// 2. 组装全局状态包 (每一帧或每隔几帧发送一次，看你需求)
@@ -155,6 +216,11 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	if (rival) statePacket.rivalScore = rival->GetScore();
 	// 假设我们只同步 package 的收集数作为分数
 	if (packageObject) statePacket.networkScore = packageObject->GetCollectionCount();
+	// [新增] 填入状态
+	statePacket.p2Connected = p2IsConnected;
+	statePacket.p1Dead = p1IsDead;
+	statePacket.p2Dead = p2IsDead;
+	statePacket.gameOverReason = (int)gameOverReason;
 
 	thisServer->SendGlobalPacket(statePacket);
 
@@ -192,16 +258,14 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (thisServer) {
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
-			// Server 收到 Client 的输入 -> 控制对应的 Player
-			// 注意：Source 是 Client ID。
-			// 在我们的简单模型里，Client 1 控制 Player 1。
-			// ENet 的 peerID 通常从 0 开始，这可能需要映射一下。
-			// 假设 Client 连接进来分配的 ID 正好对应我们的 Player ID 1...
-			// 实际上 source 可能是随机的大数，这里简单假设 source 就是 player index
-			// 如果有问题，可以用 map<int source, int playerIndex> 来映射
+			// Server gets input of Client -> control relative Player
 			int playerIndex = source + 1;
-			// 暂时假定 source 1 就是 Player 1
+			
 			ServerProcessClientInput(playerIndex, (ClientPacket*)payload);
+			break;
+		}
+		case BasicNetworkMessages::Player_Connected: { // p2 connected
+			isP2ConnectedServer = true;
 			break;
 		}
 		}
@@ -233,25 +297,29 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (type == GLOBAL_STATE_MSG) {
 		GlobalStatePacket* packet = (GlobalStatePacket*)payload;
 
-		// 1. 同步重力
+		// 原有同步
 		if (this->useGravity != packet->useGravity) {
 			this->useGravity = packet->useGravity;
 			physics.UseGravity(this->useGravity);
-			std::cout << "Gravity Synced: " << (this->useGravity ? "ON" : "OFF") << std::endl;
 		}
-
-		// 2. 同步分数 (解决 Rival 和 玩家分数显示问题)
 		if (rival) rival->SetScore(packet->rivalScore);
-
-		// 你的 MyGame 里 score 是成员变量
 		this->score = packet->networkScore;
 
-		// 还需要强制同步 Package 的内部计数，否则 MyGame::Update 可能又把它改回去
-		if (packageObject) {
-			// 这是一个 Hack，最好是在 FragileGameObject 里加个 SetCollectionCount
-			// 但由于 score = packageObject->GetCollectionCount()，我们直接改 UI 显示的 score 即可
-			// 如果逻辑强依赖 packageObject，你需要去 FragileGameObject 加 setter
+		// [新增] 同步游戏结束原因
+		this->gameOverReason = (GameOverReason)packet->gameOverReason;
+		if (this->gameOverReason != GameOverReason::None) {
+			this->isGameOver = true;
 		}
+
+		// [新增] 同步玩家死亡状态与连接状态
+		// 存下来用于 UI 绘制
+		ui_p1Dead = packet->p1Dead;
+		ui_p2Dead = packet->p2Dead;
+		ui_p2Connected = packet->p2Connected;
+
+		// 更新本地 Player 对象状态 (可选，为了防止尸体还能动)
+		if (!players.empty()) players[0]->SetDead(ui_p1Dead);
+		if (players.size() > 1) players[1]->SetDead(ui_p2Dead);
 	}
 }
 
@@ -308,7 +376,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	// 按键状态
 	newPacket.buttonstates[0] = 0;
 	newPacket.buttonstates[1] = 0;
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 	// ================= [新增/修改部分 START] =================
 
@@ -461,5 +529,56 @@ void NetworkedGame::UpdateKeys() {
 	// 情况C：既不是Client也不是Server（防御性代码，理论上不会发生）
 	else {
 		MyGame::UpdateKeys();
+	}
+}
+
+// Draw NetworkedGame UI
+void NetworkedGame::DrawNetworkHUD() {
+	float startX = 80.0f; // 屏幕右侧
+	float startY = 25.0f;
+
+	// Draw Player 1
+	Vector4 p1Color = Vector4(0, 1, 0, 1); // green name means alive
+
+	if (ui_p1Dead) {
+		p1Color = Vector4(1, 0, 0, 1); // dead is red name
+	}
+
+	Debug::Print("Player 1", Vector2(startX, startY), p1Color);
+
+	// Draw Player 2
+	Vector4 p2Color = Vector4(0.5f, 0.5f, 0.5f, 1); // grey means not connected
+	std::string p2Name = "Player 2";
+
+	bool isP2Online = (thisServer) ? isP2ConnectedServer : ui_p2Connected;
+
+	if (isP2Online) {
+		p2Color = Vector4(0, 1, 0, 1); // green
+
+		if (ui_p2Dead) {
+			p2Color = Vector4(1, 0, 0, 1); // red
+		}
+	}
+
+	Debug::Print(p2Name, Vector2(startX, startY + 5), p2Color);
+}
+
+void NetworkedGame::Disconnect() {
+	if (thisServer) {
+		delete thisServer;
+		thisServer = nullptr;
+	}
+	if (thisClient) {
+		delete thisClient;
+		thisClient = nullptr;
+	}
+	localPlayerID = -1;
+}
+
+// NetworkedGame.cpp
+void NetworkedGame::ResetGame() {
+	InitWorld();
+	if (thisServer) {
+		StartAsServer(2);
 	}
 }

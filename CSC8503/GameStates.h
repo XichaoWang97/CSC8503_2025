@@ -38,10 +38,18 @@ namespace NCL {
 		// DeadState
 		class DeadState : public PushdownState {
 		public:
-			DeadState(MyGame* g) : game(g) {}
+			DeadState(MyGame* g, GameOverReason reason) : game(g), reason(reason) {}
+
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				Debug::Print("YOU DIED", Vector2(40, 40), Debug::RED);
-				Debug::Print("The Goose got you!", Vector2(30, 50), Debug::RED);
+				Debug::Print("GameOver", Vector2(40, 40), Debug::RED);
+				// different reasons print different words
+				if (reason == GameOverReason::GooseCatch) {
+					Debug::Print("All Players Caught by Goose!", Vector2(25, 50), Debug::RED);
+				}
+				else if (reason == GameOverReason::RivalWin) {
+					Debug::Print("The Rival Delivered the Package First!", Vector2(20, 50), Debug::RED);
+					Debug::Print("You were too slow!", Vector2(35, 55), Debug::RED);
+				}
 				Debug::Print("Press F1 to Restart", Vector2(30, 60), Debug::RED);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
@@ -50,8 +58,10 @@ namespace NCL {
 				}
 				return PushdownResult::NoChange;
 			}
+
 		protected:
 			MyGame* game;
+			GameOverReason reason;
 		};
 
 		// WinState
@@ -84,11 +94,11 @@ namespace NCL {
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				game->UpdateGame(dt); // MyGame 的 Update 负责物理和逻辑
+				game->UpdateGame(dt);
 
 				// check game over conditions
 				if (game->IsGameOver()) {
-					*newState = new DeadState(game);
+					*newState = new DeadState(game, game->GetGameOverReason());
 					return PushdownResult::Push;
 				}
 
@@ -140,9 +150,20 @@ namespace NCL {
 
 				Debug::Print("Multiplayer Mode", Vector2(5, 5), Debug::GREEN);
 				Debug::Print("Press ESC to Disconnect", Vector2(5, 10), Debug::WHITE);
+				// check game over conditions
+				if (netGame->IsGameOver()) {
+					*newState = new DeadState(netGame, netGame->GetGameOverReason());
+					return PushdownResult::Push;
+				}
+
+				// check game win conditions
+				if (netGame->IsGameWon()) {
+					*newState = new WinState(netGame);
+					return PushdownResult::Push;
+				}
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
-					// 可以在这里添加断开连接的逻辑，例如 netGame->Disconnect();
+					netGame->Disconnect();
 					return PushdownResult::Pop;
 				}
 				return PushdownResult::NoChange;

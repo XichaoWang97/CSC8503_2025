@@ -21,6 +21,9 @@ namespace NCL::CSC8503 {
 		void UpdateGame(float dt) override;
 		void ReceivePacket(int type, GamePacket* payload, int source) override;
 		void OnPlayerCollision(NetworkPlayer* a, NetworkPlayer* b);
+		void Disconnect();
+
+		void ResetGame() override;
 
 	protected:
 		void UpdateAsServer(float dt);
@@ -31,6 +34,7 @@ namespace NCL::CSC8503 {
 		void InitDefaultPlayer() override;
 		void InitNetworkObjectToWorld(); // dietribute network object
 		void UpdateKeys() override;
+		void DrawNetworkHUD(); // draw UI to show player states
 
 		// generate player object for a given client ID
 		GameObject* SpawnNetworkedPlayer(int playerID);
@@ -40,6 +44,12 @@ namespace NCL::CSC8503 {
 		GameClient* thisClient;
 		float timeToNextPacket;
 		int packetsToSnapshot;
+
+		// player states
+		bool ui_p2Connected = false;
+		bool ui_p1Dead = false;
+		bool ui_p2Dead = false;
+		bool isP2ConnectedServer = false;
 
 		std::map<int, int> stateIDs; // record last acknowledged state ID per client
 		std::map<int, GameObject*> serverPlayers; // ClientID -> PlayerObject

@@ -37,7 +37,7 @@ namespace NCL {
 			virtual void UpdateGame(float dt);
 
 			// Reset the game to the initial state
-			void ResetGame() {
+			virtual void ResetGame() {
 				InitWorld();
 			}
 
