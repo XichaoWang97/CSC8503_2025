@@ -576,6 +576,7 @@ void MyGame::WinLoseLogic(Player* player){
 		if (inZone && score >= winningScore) {
 			isGameWon = true;
 			isTimerRunning = false;
+			gameOverReason = GameOverReason::PlayerWin;
 		}
 		// score is not enough
 		if (inZone && score < winningScore) {

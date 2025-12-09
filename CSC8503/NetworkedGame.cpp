@@ -297,8 +297,18 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 
 		// [新增] 同步游戏结束原因
 		this->gameOverReason = (GameOverReason)packet->gameOverReason;
-		if (this->gameOverReason != GameOverReason::None) {
-			this->isGameOver = true;
+		if (this->gameOverReason == GameOverReason::PlayerWin) {
+			this->isGameWon = true; // 如果是玩家胜利，设置本地状态为赢
+			this->isGameOver = false;
+		}
+		else if (this->gameOverReason != GameOverReason::None) {
+			this->isGameOver = true; // 其他原因（如被抓、对手赢）则是游戏结束
+			this->isGameWon = false;
+		}
+		else {
+			// None 状态，游戏正在进行
+			this->isGameOver = false;
+			this->isGameWon = false;
 		}
 
 		// [新增] 同步玩家死亡状态与连接状态

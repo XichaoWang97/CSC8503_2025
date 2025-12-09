@@ -27,7 +27,8 @@ namespace NCL {
 		enum class GameOverReason {
 			None,
 			GooseCatch, // catched by goose
-			RivalWin    // rival win
+			RivalWin,    // rival win
+			PlayerWin
 		};
 
 		class MyGame {

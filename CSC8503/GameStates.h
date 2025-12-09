@@ -51,10 +51,9 @@ namespace NCL {
 					Debug::Print("The Rival Delivered the Package First!", Vector2(20, 50), Debug::RED);
 					Debug::Print("You were too slow!", Vector2(35, 55), Debug::RED);
 				}
-				Debug::Print("Press F1 to Restart", Vector2(30, 60), Debug::RED);
+				Debug::Print("Press ESC to Return to Main Menu", Vector2(30, 60), Debug::WHITE);
 
-				if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
-					game->ResetGame();
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					return PushdownResult::Pop;
 				}
 				return PushdownResult::NoChange;
@@ -115,17 +114,16 @@ namespace NCL {
 					}
 				}
 
-				Debug::Print("Press F1 to Restart", Vector2(30, 70), Debug::WHITE);
+				Debug::Print("Press ESC to Return to Menu", Vector2(30, 70), Debug::WHITE);
 
-				// 这里只是为了方便看榜，可以不写
 				if (Window::GetKeyboard()->KeyDown(KeyCodes::TAB)) {
 					game->DrawHighScoreHUD();
 				}
 
-				if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
-					game->ResetGame();
+				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					return PushdownResult::Pop;
 				}
+
 				return PushdownResult::NoChange;
 			}
 
@@ -174,23 +172,30 @@ namespace NCL {
 		public:
 			SinglePlayerState(MyGame* g, GameWorld* w, PhysicsSystem* p, bool reset = true)
 				: game(g), world(w), physics(p) {
+				gameFinished = false;
 				if (reset) {
 					game->ResetGame();
 				}
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
+				if (gameFinished) {
+					return PushdownResult::Pop;
+				}
+
 				game->UpdateGame(dt);
 
 				// check game over conditions
 				if (game->IsGameOver()) {
 					*newState = new DeadState(game, game->GetGameOverReason());
+					gameFinished = true;
 					return PushdownResult::Push;
 				}
 
 				// check game win conditions
 				if (game->IsGameWon()) {
 					*newState = new WinState(game);
+					gameFinished = true;
 					return PushdownResult::Push;
 				}
 
@@ -220,31 +225,35 @@ namespace NCL {
 			MyGame* game;
 			GameWorld* world;
 			PhysicsSystem* physics;
+			bool gameFinished;
 		};
 
 		// Networked game state
 		class NetworkedGameState : public PushdownState {
 		public:
-			NetworkedGameState(NetworkedGame* g)
-				: netGame(g) {
-			}
+			NetworkedGameState(NetworkedGame* g) : netGame(g) { gameFinished = false; }
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				// 【关键修改】必须调用 netGame 的 UpdateGame，因为网络收发包逻辑都在这里面
-				// 且 NetworkedGame::UpdateGame 内部会调用 physics->Update，所以不要在这里重复调用
-				netGame->UpdateGame(dt);
+				// 如果刚刚从结算界面退出来（gameFinished为true），则断开连接并返回主菜单
+				if (gameFinished) {
+					netGame->Disconnect(); // 清理网络
+					return PushdownResult::Pop; // 回到 MainMenuState
+				}
 
+				netGame->UpdateGame(dt);
 				Debug::Print("Multiplayer Mode", Vector2(5, 5), Debug::GREEN);
 				Debug::Print("Press ESC to Disconnect", Vector2(5, 10), Debug::WHITE);
 				// check game over conditions
 				if (netGame->IsGameOver()) {
 					*newState = new DeadState(netGame, netGame->GetGameOverReason());
+					gameFinished = true;
 					return PushdownResult::Push;
 				}
 
 				// check game win conditions
 				if (netGame->IsGameWon()) {
 					*newState = new WinState(netGame);
+					gameFinished = true;
 					return PushdownResult::Push;
 				}
 
@@ -262,6 +271,7 @@ namespace NCL {
 
 		protected:
 			NetworkedGame* netGame;
+			bool gameFinished;
 		};
 
 		// Client game state
