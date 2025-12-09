@@ -8,6 +8,7 @@
 #include "GameWorld.h"
 
 #include "NetworkedGame.h"
+#include "HighScoreManager.h"
 
 namespace NCL {
 	namespace CSC8503 {
@@ -67,11 +68,59 @@ namespace NCL {
 		// WinState
 		class WinState : public PushdownState {
 		public:
-			WinState(MyGame* g) : game(g) {}
+			WinState(MyGame* g, bool networked = false) : game(g), isNetworked(networked) {
+				finalTime = game->GetGameDuration();
+
+				// 传入 isNetworked，检查对应的榜单
+				isNewRecord = HighScoreManager::Instance().IsNewRecord(finalTime, isNetworked);
+
+				canInputName = !isNetworked || (isNetworked && ((NetworkedGame*)game)->GetServer() != nullptr);
+				nameInput = "";
+				hasSubmitted = false;
+			}
+
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				Debug::Print("MISSION SUCCESS!", Vector2(35, 40), Debug::GREEN);
-				Debug::Print("Coins Collected!", Vector2(35, 50), Debug::GREEN);
-				Debug::Print("Press F1 to Restart", Vector2(30, 60), Debug::GREEN);
+				Debug::Print("MISSION SUCCESS!", Vector2(35, 30), Debug::GREEN);
+
+				// 显示时间
+				std::string timeStr;
+				game->FormatTime(finalTime, timeStr); // 假设你在 MyGame 把 FormatTime 设为 public 了
+				Debug::Print("Time: " + timeStr, Vector2(40, 35), Debug::WHITE);
+
+				if (isNewRecord) {
+					Debug::Print("NEW RECORD!", Vector2(40, 25), Vector4(1, 1, 0, 1));
+
+					if (canInputName && !hasSubmitted) {
+						Debug::Print("Enter Name: " + nameInput + "_", Vector2(30, 50), Debug::CYAN);
+						Debug::Print("Press ENTER to Submit", Vector2(30, 55), Debug::CYAN);
+
+						HandleNameInput(); // 调用输入函数
+
+						if (Window::GetKeyboard()->KeyPressed(KeyCodes::RETURN)) {
+							if (nameInput.empty()) nameInput = "Unknown";
+
+							// 提交分数
+							HighScoreManager::Instance().AddScore(nameInput, finalTime, isNetworked);
+							hasSubmitted = true;
+
+							// 如果是服务器，广播给其他人
+							if (isNetworked) {
+								((NetworkedGame*)game)->BroadcastHighScores();
+							}
+						}
+						return PushdownResult::NoChange;
+					}
+					else if (!canInputName) {
+						Debug::Print("You broke a record!", Vector2(30, 50), Debug::CYAN);
+					}
+				}
+
+				Debug::Print("Press F1 to Restart", Vector2(30, 70), Debug::WHITE);
+
+				// 这里只是为了方便看榜，可以不写
+				if (Window::GetKeyboard()->KeyDown(KeyCodes::TAB)) {
+					game->DrawHighScoreHUD();
+				}
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
 					game->ResetGame();
@@ -79,8 +128,45 @@ namespace NCL {
 				}
 				return PushdownResult::NoChange;
 			}
+
+			// Input name
+			void HandleNameInput() {
+
+				const Keyboard* k = Window::GetKeyboard();
+
+				// A-Z
+				for (int i = 0; i < 26; ++i) {
+					auto key = static_cast<decltype(KeyCodes::A)>((int)KeyCodes::A + i);
+
+					if (k->KeyPressed(key)) {
+						nameInput += (char)('A' + i);
+					}
+				}
+
+				// Space
+				if (k->KeyPressed(KeyCodes::SPACE)) {
+					nameInput += ' ';
+				}
+
+				// Back
+				if (k->KeyPressed(KeyCodes::BACK) && !nameInput.empty()) {
+					nameInput.pop_back();
+				}
+
+				// 限制长度
+				if (nameInput.length() > 12) {
+					nameInput.pop_back();
+				}
+			}
+
 		protected:
 			MyGame* game;
+			float finalTime;
+			bool isNewRecord;
+			bool canInputName;
+			bool hasSubmitted;
+			bool isNetworked;
+			std::string nameInput;
 		};
 
 		// Single player state

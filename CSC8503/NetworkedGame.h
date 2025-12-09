@@ -29,6 +29,9 @@ namespace NCL::CSC8503 {
 		void WinLoseLogic(Player* player) override;
 		void GetCoinLogic(Player* player, float dt) override;
 
+		void BroadcastHighScores();
+		GameServer* GetServer() const { return thisServer; }
+
 	protected:
 		void UpdateAsServer(float dt);
 		void UpdateAsClient(float dt);
@@ -39,7 +42,7 @@ namespace NCL::CSC8503 {
 		void InitNetworkObjectToWorld(); // dietribute network object
 		void UpdateKeys() override;
 		void DrawNetworkHUD(); // draw UI to show player states
-
+		
 		// generate player object for a given client ID
 		GameObject* SpawnNetworkedPlayer(int playerID);
 		void ServerProcessClientInput(int playerID, ClientPacket* packet);

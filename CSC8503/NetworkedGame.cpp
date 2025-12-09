@@ -8,6 +8,7 @@
 #include "Matrix.h"
 #define COLLISION_MSG 30
 #define GLOBAL_STATE_MSG 50 
+#define HIGHSCORE_MSG 60 
 
 using namespace NCL;
 using namespace CSC8503;
@@ -43,6 +44,17 @@ struct MessagePacket : public GamePacket {
 	}
 };
 
+struct HighScorePacket : public GamePacket {
+	int count;
+	ScoreEntry entries[5];
+
+	HighScorePacket() {
+		type = HIGHSCORE_MSG;
+		size = sizeof(HighScorePacket) - sizeof(GamePacket);
+		count = 0;
+	}
+};
+
 NetworkedGame::NetworkedGame(GameWorld& gameWorld, GameTechRendererInterface& renderer, PhysicsSystem& physics) : MyGame(gameWorld, renderer, physics)
 {
 	thisServer = nullptr;
@@ -50,6 +62,7 @@ NetworkedGame::NetworkedGame(GameWorld& gameWorld, GameTechRendererInterface& re
 	NetworkBase::Initialise();
 	timeToNextPacket = 0.0f;
 	packetsToSnapshot = 0;
+	isNetworkGame = true;
 }
 
 NetworkedGame::~NetworkedGame() {
@@ -97,11 +110,13 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 		std::cout << "Connected to Server!" << std::endl;
 	}
 
+	// register messages
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Delta_State, this);
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Full_State, this);
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Player_Connected, this);
 	thisClient->RegisterPacketHandler(BasicNetworkMessages::Player_Disconnected, this);
 	thisClient->RegisterPacketHandler(GLOBAL_STATE_MSG, this);
+	thisClient->RegisterPacketHandler(HIGHSCORE_MSG, this);
 
 	InitWorld();
 	InitNetworkObjectToWorld();
@@ -214,7 +229,8 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 }
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
-	if (thisServer) {
+	if (type == BasicNetworkMessages::Player_Connected && thisServer) {
+		BroadcastHighScores(); // send ranks
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
 			// Server gets input of Client -> control relative Player
@@ -230,6 +246,17 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 	}
 	else if (thisClient) {
+		// deal with rank
+		if (type == HIGHSCORE_MSG) {
+			HighScorePacket* pkt = (HighScorePacket*)payload;
+			// Update local rank
+			auto& list = HighScoreManager::Instance().GetScores(true);
+			list.clear();
+			for (int i = 0; i < pkt->count; ++i) {
+				list.push_back(pkt->entries[i]);
+			}
+		}
+
 		switch (type) { // IMPORTANT, update position of objects in the whole world (must have networked ID)!!!
 		// 接收全量状态 (Full_State) 或 增量状态 (Delta_State)
 		case BasicNetworkMessages::Full_State:
@@ -427,39 +454,8 @@ void NetworkedGame::UpdateMinimumState() {
 	}
 }
 
-// This is an empty function to disable the default single-player player creation
-void NetworkedGame::InitDefaultPlayer() {
-	// Do Nothing.
-}
+// Auxiliary Functions-----------------------------~o(> v < )o
 
-void NetworkedGame::InitNetworkObjectToWorld() {
-	// we assume 0-4 to player
-	// start to allocate from 5
-	rival->SetNetworkObject(new NetworkObject(*rival, 5));
-	goose->SetNetworkObject(new NetworkObject(*goose, 6));
-	patrolEnemy->SetNetworkObject(new NetworkObject(*patrolEnemy, 7));
-	packageObject->SetNetworkObject(new NetworkObject(*packageObject, 8));;
-
-	int idCounter = 10;
-	// allocate numbers to coins
-	for (auto& coin : coins) {
-		if (!coin->GetNetworkObject()) {
-			coin->SetNetworkObject(new NetworkObject(*coin, idCounter++));
-		}
-	}
-
-	// allocate to stones and cube stones
-	world.OperateOnContents([&](GameObject* o) {
-		// check objects by name
-		if (o->GetName() == "Stone" || o->GetName() == "CubeStone") {
-			if (!o->GetNetworkObject()) {
-				o->SetNetworkObject(new NetworkObject(*o, idCounter++));
-			}
-		}
-	});
-}
-
-// Draw NetworkedGame UI
 void NetworkedGame::DrawNetworkHUD() {
 	float startX = 80.0f; // 屏幕右侧
 	float startY = 25.0f;
@@ -500,6 +496,52 @@ void NetworkedGame::Disconnect() {
 		thisClient = nullptr;
 	}
 	localPlayerID = -1;
+}
+
+void NetworkedGame::BroadcastHighScores() {
+	if (!thisServer) return;
+
+	HighScorePacket packet;
+	// get rank data
+	auto& scores = HighScoreManager::Instance().GetScores(true);
+
+	packet.count = (int)scores.size();
+	for (int i = 0; i < packet.count; ++i) {
+		packet.entries[i] = scores[i];
+	}
+	thisServer->SendGlobalPacket(packet);
+}
+
+// This is an empty function to disable the default single-player player creation
+void NetworkedGame::InitDefaultPlayer() {
+	// Do Nothing.
+}
+
+void NetworkedGame::InitNetworkObjectToWorld() {
+	// we assume 0-4 to player
+	// start to allocate from 5
+	rival->SetNetworkObject(new NetworkObject(*rival, 5));
+	goose->SetNetworkObject(new NetworkObject(*goose, 6));
+	patrolEnemy->SetNetworkObject(new NetworkObject(*patrolEnemy, 7));
+	packageObject->SetNetworkObject(new NetworkObject(*packageObject, 8));;
+
+	int idCounter = 10;
+	// allocate numbers to coins
+	for (auto& coin : coins) {
+		if (!coin->GetNetworkObject()) {
+			coin->SetNetworkObject(new NetworkObject(*coin, idCounter++));
+		}
+	}
+
+	// allocate to stones and cube stones
+	world.OperateOnContents([&](GameObject* o) {
+		// check objects by name
+		if (o->GetName() == "Stone" || o->GetName() == "CubeStone") {
+			if (!o->GetNetworkObject()) {
+				o->SetNetworkObject(new NetworkObject(*o, idCounter++));
+			}
+		}
+		});
 }
 
 // Override Functions Below-----------------------------~o(> v < )o

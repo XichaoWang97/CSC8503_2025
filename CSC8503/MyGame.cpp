@@ -102,6 +102,14 @@ void MyGame::UpdateGame(float dt) {
 
 	Player* localPlayer = GetLocalPlayer(); // single player / player in servant
 	if (localPlayer && packageObject) {
+		
+		if (isTimerRunning && !isGameOver && !isGameWon) { gameDuration += dt; } // Time Logic
+		if (Window::GetKeyboard()->KeyDown(KeyCodes::TAB)) { DrawHighScoreHUD(); } // press TAB to show rank
+		// show time
+		std::string timeStr;
+		FormatTime(gameDuration, timeStr);
+		Debug::Print("Time: " + timeStr, Vector2(75, 5), Vector4(1, 1, 1, 1));
+
 		SetCameraToPlayer(localPlayer); // camera follow player
 
 		// Show package health
@@ -184,6 +192,10 @@ void MyGame::InitCamera() {
 }
 
 void MyGame::InitWorld() {
+	score = 0;
+	gameDuration = 0.0f; // reset time
+	isTimerRunning = true; // time start running
+
 	world.ClearAndErase();
 	physics.Clear();
 	coins.clear();
@@ -563,6 +575,7 @@ void MyGame::WinLoseLogic(Player* player){
 		// score && inZone -> win
 		if (inZone && score >= winningScore) {
 			isGameWon = true;
+			isTimerRunning = false;
 		}
 		// score is not enough
 		if (inZone && score < winningScore) {
@@ -571,6 +584,7 @@ void MyGame::WinLoseLogic(Player* player){
 		// Lose
 		if (inZone && rival->GetScore() >= winningScore) {
 			isGameOver = true;
+			isTimerRunning = false;
 			gameOverReason = GameOverReason::RivalWin;
 		}
 	}
@@ -615,6 +629,35 @@ void MyGame::RivalLogic(){
 			rival->ThrowHeldItem(Vector3(0, 0, 0));
 			rival->SetScore(0);
 		}
+	}
+}
+
+// Auxiliary Functions
+
+void MyGame::FormatTime(float time, std::string& outStr) {
+	int minutes = (int)time / 60;
+	int seconds = (int)time % 60;
+	std::stringstream ss;
+	ss << std::setfill('0') << std::setw(2) << minutes << ":"
+		<< std::setfill('0') << std::setw(2) << seconds;
+	outStr = ss.str();
+}
+
+void MyGame::DrawHighScoreHUD() {
+	// 【关键修改】根据当前模式获取对应的榜单
+	auto& scores = HighScoreManager::Instance().GetScores(isNetworkGame);
+
+	float startY = 30.0f;
+	std::string title = isNetworkGame ? "--- NETWORK BEST ---" : "--- SINGLE BEST ---";
+	Vector4 color = isNetworkGame ? Vector4(0, 1, 1, 1) : Vector4(1, 0.8f, 0, 1); // 网络蓝，单机黄
+
+	Debug::Print(title, Vector2(40, startY), color);
+
+	for (size_t i = 0; i < scores.size(); ++i) {
+		std::string timeStr;
+		FormatTime(scores[i].time, timeStr);
+		std::string entry = std::to_string(i + 1) + ". " + std::string(scores[i].name) + " - " + timeStr;
+		Debug::Print(entry, Vector2(35, startY + 5 + (i * 5)), Vector4(1, 1, 1, 1));
 	}
 }
 

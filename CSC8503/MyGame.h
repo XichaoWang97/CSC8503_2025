@@ -7,6 +7,7 @@
 #include "GooseNPC.h"
 #include "RivalAI.h"
 #include "Player.h"
+#include "HighScoreManager.h"
 
 namespace NCL {
 	class Controller;
@@ -56,8 +57,17 @@ namespace NCL {
 			}
 
 			GameOverReason GetGameOverReason() const { return gameOverReason; }
+			float GetGameDuration() const { return gameDuration; }
+			void DrawHighScoreHUD();   // draw high score rank
+			void FormatTime(float time, std::string& outStr); // Time: MM:SS
 
 		protected:
+			// Time
+			float gameDuration = 0.0f;
+			bool  isTimerRunning = false;
+
+			bool isNetworkGame = false;
+
 			void InitCamera();
 			void InitWorld();
 			void InitCourierLevel();
