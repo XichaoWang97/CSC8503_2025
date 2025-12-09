@@ -8,7 +8,7 @@ using namespace CSC8503;
 
 GooseNPC::GooseNPC(NavigationGrid* _grid) : StateGameObject("Goose") {
     grid = _grid;
-	chaseSpeed = 3.5f; // chase speed of the goose
+	chaseSpeed = 2.5f; // chase speed of the goose
     rootNode = nullptr;
     timeSinceLastPathCalc = 0.0f;
     BuildBehaviourTree();

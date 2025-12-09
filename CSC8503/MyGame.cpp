@@ -576,6 +576,7 @@ void MyGame::WinLoseLogic(Player* player){
 		// Lose
 		if (inZone && rival->GetScore() >= winningScore) {
 			isGameOver = true;
+			gameOverReason = GameOverReason::RivalWin;
 		}
 	}
 	// Death Condition - hit by goose
@@ -586,9 +587,8 @@ void MyGame::WinLoseLogic(Player* player){
 		// simple distance check, large than goose size
 		float dist = Vector::Length((pPos - gPos));
 		if (dist < 4.1f) {
-			isGameOver = true;// player die
-			// if all player die
-			// isGameover = true
+			isGameOver = true;
+			gameOverReason = GameOverReason::GooseCatch;
 		}
 	}
 }
@@ -629,8 +629,8 @@ void MyGame::InitCourierLevel() {
 	if (!navGrid) {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
-	rival = AddRivalAIToWorld(Vector3(-60, 5, 50), 1.0f); // red color
-	goose = AddGooseNPCToWorld(Vector3(-60, 5, 30), 3.0f);
+	rival = AddRivalAIToWorld(Vector3(-55, 5, 0), 1.0f); // red color
+	goose = AddGooseNPCToWorld(Vector3(-60, 5, 0), 3.0f);
 
 	// Add Enemy that patrols and targets the player
 	patrolEnemy = AddPatrolEnemyToWorld(Vector3(20, 4, 20), Vector3(20, 4, -20));

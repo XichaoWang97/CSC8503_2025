@@ -24,6 +24,10 @@ namespace NCL::CSC8503 {
 		void Disconnect();
 
 		void ResetGame() override;
+		void PackageLogic(Player* player, float dt) override;
+		void RivalLogic() override;
+		void WinLoseLogic(Player* player) override;
+		void GetCoinLogic(Player* player, float dt) override;
 
 	protected:
 		void UpdateAsServer(float dt);

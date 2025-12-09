@@ -77,10 +77,10 @@ namespace NCL {
 			// Game logic functions
 			void SetCameraToPlayer(Player* player);
 			void PuzzleDoorLogic(float dt);
-			void GetCoinLogic(Player* player, float dt);
-			void PackageLogic(Player* player, float dt);
-			void WinLoseLogic(Player* player);
-			void RivalLogic();
+			virtual void GetCoinLogic(Player* player, float dt);
+			virtual void PackageLogic(Player* player, float dt);
+			virtual void WinLoseLogic(Player* player);
+			virtual void RivalLogic();
 
 			// pointers to specific game objects
 			GameObject* winZone = nullptr;  // destination
