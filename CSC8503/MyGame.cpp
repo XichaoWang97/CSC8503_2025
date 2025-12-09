@@ -539,7 +539,7 @@ void MyGame::GetCoinLogic(Player* player, float dt) {
 		// collection radius 2.5f, need FragilePackage to collect
 		if (playerHeld) {
 			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
-				c->GetRenderObject()->SetColour(Vector4(0, 0, 0, 0)); // Set it transparent, which means it is removed
+				c->GetTransform().SetPosition(Vector3(0, -999, 0));// set position to -999
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
 			}
@@ -616,7 +616,7 @@ void MyGame::RivalLogic(){
 		
 		if (rivalHeld) {
 			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
-				world.RemoveGameObject(c, true); // remove coin from world
+				c->GetTransform().SetPosition(Vector3(0, -999, 0)); // remove coin from world
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
 			}

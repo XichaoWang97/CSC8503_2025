@@ -71,7 +71,17 @@ NetworkedGame::~NetworkedGame() {
 }
 
 void NetworkedGame::StartAsServer(int playerCount) {
+	// 1. 【新增】强制重置本地网络状态标记
+	ui_p1Dead = false;
+	ui_p2Dead = false;
+	ui_p2Connected = false;
+	isP2ConnectedServer = false;
+	gameOverReason = GameOverReason::None;
+	isGameOver = false;
+	isGameWon = false;
+	stateIDs.clear(); // 清空旧的包确认记录
 	Disconnect();
+
 	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 1); // if you need more clients, change the number here
 	// 注册处理: 客户端发来的输入包 + 确认包
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
@@ -104,6 +114,16 @@ void NetworkedGame::StartAsServer(int playerCount) {
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
+	// 1. 【新增】强制重置本地网络状态标记
+	ui_p1Dead = false;
+	ui_p2Dead = false;
+	ui_p2Connected = false;
+	isP2ConnectedServer = false;
+	gameOverReason = GameOverReason::None;
+	isGameOver = false;
+	isGameWon = false;
+	stateIDs.clear(); // 清空旧的包确认记录
+
 	Disconnect();
 	thisClient = new GameClient();
 	if (thisClient->Connect(a, b, c, d, NetworkBase::GetDefaultPort())) {
@@ -121,19 +141,17 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 	InitWorld();
 	InitNetworkObjectToWorld();
 
-	// 【核心逻辑】客户端也初始化容器, 根据数字初始化 Vector。这里为了测试，假设我们也是 2 人房
+	localPlayerID = 1;
+	// 【核心逻辑】客户端也初始化容器, 根据数字初始化 Vector。
 	int estimatedPlayers = 2;
 
 	for (int i = 0; i < estimatedPlayers; ++i) {
 		GameObject* p = SpawnNetworkedPlayer(i);
-
-		// 客户端必须把所有网络对象设为无物理，防止抖动
-		if (p->GetPhysicsObject()) {
-			p->GetPhysicsObject()->SetInverseMass(0.0f);
+		if (i != localPlayerID) {
+			p->GetPhysicsObject()->SetInverseMass(0.0f); // no physics
 		}
 	}
-	localPlayerID = 1;
-
+	
 	// 处理 Goose/AI 的本地物理禁用
 	if (goose && goose->GetPhysicsObject()) goose->GetPhysicsObject()->SetInverseMass(0.0f);
 	if (rival && rival->GetPhysicsObject()) rival->GetPhysicsObject()->SetInverseMass(0.0f);
@@ -145,12 +163,16 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 }
 
 void NetworkedGame::UpdateGame(float dt) {
-	// 1. 客户端逻辑：每帧都运行，确保不漏掉按键
+	if (!isGameOver && !isGameWon) {
+		MyGame::UpdateGame(dt);
+	}
+
+	// 客户端逻辑：每帧都运行，确保不漏掉按键
 	if (thisClient) {
 		UpdateAsClient(dt);
 	}
 
-	// 2. 服务器逻辑：依然保持 20Hz (因为这是发送大量快照，太频繁会卡死)
+	// 给客户端发包
 	timeToNextPacket -= dt;
 	if (timeToNextPacket <= 0.0f) {
 		if (thisServer) {
@@ -163,7 +185,6 @@ void NetworkedGame::UpdateGame(float dt) {
 	if (thisServer) thisServer->UpdateServer();
 	if (thisClient) thisClient->UpdateClient();
 
-	MyGame::UpdateGame(dt);
 	DrawNetworkHUD();
 }
 
@@ -229,7 +250,7 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 }
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
-	if (type == BasicNetworkMessages::Player_Connected && thisServer) {
+	if (thisServer) {
 		BroadcastHighScores(); // send ranks
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
@@ -241,7 +262,11 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 		case BasicNetworkMessages::Player_Connected: { // p2 connected
 			isP2ConnectedServer = true;
+			BroadcastHighScores();
 			break;
+		}
+		case BasicNetworkMessages::Received_State: {
+			break; // handle received-state ack if used
 		}
 		}
 	}
@@ -283,7 +308,6 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 		}
 	}
-
 	if (type == GLOBAL_STATE_MSG) {
 		GlobalStatePacket* packet = (GlobalStatePacket*)payload;
 
@@ -294,21 +318,23 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 		if (rival) rival->SetScore(packet->rivalScore);
 		this->score = packet->playerScore;
-
-		// [新增] 同步游戏结束原因
-		this->gameOverReason = (GameOverReason)packet->gameOverReason;
-		if (this->gameOverReason == GameOverReason::PlayerWin) {
-			this->isGameWon = true; // 如果是玩家胜利，设置本地状态为赢
-			this->isGameOver = false;
-		}
-		else if (this->gameOverReason != GameOverReason::None) {
-			this->isGameOver = true; // 其他原因（如被抓、对手赢）则是游戏结束
-			this->isGameWon = false;
-		}
-		else {
-			// None 状态，游戏正在进行
-			this->isGameOver = false;
-			this->isGameWon = false;
+		// 同步游戏结束原因
+		GameOverReason serverReason = (GameOverReason)packet->gameOverReason;
+		if (!this->isGameWon && !this->isGameOver) {
+			if (serverReason == GameOverReason::PlayerWin) {
+				this->isGameWon = true;
+				this->isGameOver = false;
+				this->gameOverReason = serverReason;
+			}
+			else if (serverReason != GameOverReason::None) {
+				this->isGameOver = true;
+				this->isGameWon = false;
+				this->gameOverReason = serverReason;
+			}
+			else {
+				this->isGameOver = false;
+				this->isGameWon = false;
+			}
 		}
 
 		// [新增] 同步玩家死亡状态与连接状态
@@ -355,7 +381,6 @@ void NetworkedGame::ServerProcessClientInput(int playerID, ClientPacket* packet)
 // Client Logic
 void NetworkedGame::UpdateAsClient(float dt) {
 	ClientPacket newPacket;
-
 	int forward = 0;
 	int right = 0;
 
@@ -556,16 +581,6 @@ void NetworkedGame::InitNetworkObjectToWorld() {
 
 // Override Functions Below-----------------------------~o(> v < )o
 
-void NetworkedGame::ResetGame() {
-	InitWorld();
-	if (thisServer) {
-		StartAsServer(2);
-	}
-	else {
-		return;
-	}
-}
-
 void NetworkedGame::PackageLogic(Player* player, float dt) {
 	if (thisServer) {
 		// calculate
@@ -612,9 +627,6 @@ void NetworkedGame::UpdateKeys() {
 		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
 			useGravity = !useGravity;
 			physics.UseGravity(useGravity);
-
-			// inform others
-			std::cout << "Server toggled gravity!" << std::endl;
 
 			GlobalStatePacket statePacket;
 			statePacket.useGravity = useGravity;

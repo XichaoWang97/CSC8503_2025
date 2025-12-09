@@ -23,7 +23,6 @@ namespace NCL::CSC8503 {
 		void OnPlayerCollision(NetworkPlayer* a, NetworkPlayer* b);
 		void Disconnect();
 
-		void ResetGame() override;
 		void PackageLogic(Player* player, float dt) override;
 		void RivalLogic() override;
 		void WinLoseLogic(Player* player) override;
@@ -42,7 +41,7 @@ namespace NCL::CSC8503 {
 		void InitNetworkObjectToWorld(); // dietribute network object
 		void UpdateKeys() override;
 		void DrawNetworkHUD(); // draw UI to show player states
-		
+
 		// generate player object for a given client ID
 		GameObject* SpawnNetworkedPlayer(int playerID);
 		void ServerProcessClientInput(int playerID, ClientPacket* packet);
@@ -58,6 +57,8 @@ namespace NCL::CSC8503 {
 		bool ui_p2Dead = false;
 		bool isP2ConnectedServer = false;
 
+		float jumpTimer = 0.0f;
+		std::map<int, bool> lastJumpState;
 		std::map<int, int> stateIDs; // record last acknowledged state ID per client
 		std::map<int, GameObject*> serverPlayers; // ClientID -> PlayerObject
 	};

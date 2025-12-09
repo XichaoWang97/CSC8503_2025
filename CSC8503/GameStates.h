@@ -42,6 +42,7 @@ namespace NCL {
 			DeadState(MyGame* g, GameOverReason reason) : game(g), reason(reason) {}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
+				game->UpdateGame(dt); // it is necessary to update game here, make sure client can get the message after server win or lose
 				Debug::Print("GameOver", Vector2(40, 40), Debug::RED);
 				// different reasons print different words
 				if (reason == GameOverReason::GooseCatch) {
@@ -51,7 +52,7 @@ namespace NCL {
 					Debug::Print("The Rival Delivered the Package First!", Vector2(20, 50), Debug::RED);
 					Debug::Print("You were too slow!", Vector2(35, 55), Debug::RED);
 				}
-				Debug::Print("Press ESC to Return to Main Menu", Vector2(30, 60), Debug::WHITE);
+				Debug::Print("Press ESC to Return to Menu", Vector2(30, 60), Debug::WHITE);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					return PushdownResult::Pop;
@@ -79,6 +80,7 @@ namespace NCL {
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
+				game->UpdateGame(dt);  // it is necessary to update game here, make sure client can get the message after server win or lose
 				Debug::Print("MISSION SUCCESS!", Vector2(35, 30), Debug::GREEN);
 
 				// 显示时间
@@ -234,13 +236,14 @@ namespace NCL {
 			NetworkedGameState(NetworkedGame* g) : netGame(g) { gameFinished = false; }
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
+				netGame->UpdateGame(dt);
+
 				// 如果刚刚从结算界面退出来（gameFinished为true），则断开连接并返回主菜单
 				if (gameFinished) {
 					netGame->Disconnect(); // 清理网络
 					return PushdownResult::Pop; // 回到 MainMenuState
 				}
 
-				netGame->UpdateGame(dt);
 				Debug::Print("Multiplayer Mode", Vector2(5, 5), Debug::GREEN);
 				Debug::Print("Press ESC to Disconnect", Vector2(5, 10), Debug::WHITE);
 				// check game over conditions
@@ -252,7 +255,7 @@ namespace NCL {
 
 				// check game win conditions
 				if (netGame->IsGameWon()) {
-					*newState = new WinState(netGame);
+					*newState = new WinState(netGame, true);
 					gameFinished = true;
 					return PushdownResult::Push;
 				}
