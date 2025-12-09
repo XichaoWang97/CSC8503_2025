@@ -44,7 +44,7 @@ namespace NCL {
 				Debug::Print("GameOver", Vector2(40, 40), Debug::RED);
 				// different reasons print different words
 				if (reason == GameOverReason::GooseCatch) {
-					Debug::Print("All Players Caught by Goose!", Vector2(25, 50), Debug::RED);
+					Debug::Print("Player Caught by Goose!", Vector2(25, 50), Debug::RED);
 				}
 				else if (reason == GameOverReason::RivalWin) {
 					Debug::Print("The Rival Delivered the Package First!", Vector2(20, 50), Debug::RED);

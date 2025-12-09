@@ -93,7 +93,6 @@ void RivalAI::BuildBehaviourTree() {
     rootNode = root;
 }
 
-// ================= 辅助函数 =================
 
 void RivalAI::LookAt(Vector3 targetPos) {
     Vector3 dir = (targetPos - GetTransform().GetPosition());
@@ -161,11 +160,11 @@ BehaviourState RivalAI::IsHoldingStone(float dt) {
 Player* RivalAI::FindPlayerHoldingPackage() {
     if (!allPlayers) return nullptr;
 
-    for (Player* p : *allPlayers) { // 遍历所有玩家
+    for (Player* p : *allPlayers) { // check all players
         if (!p) continue;
         GameObject* heldItem = p->GetHeldItem();
         if (heldItem && heldItem->GetName() == "FragilePackage") {
-            return p; // 找到了！就是这个家伙
+            return p; // find
         }
     }
     return nullptr;
@@ -174,7 +173,7 @@ Player* RivalAI::FindPlayerHoldingPackage() {
 BehaviourState RivalAI::DoesPlayerHavePackage(float dt) {
     Player* targetP = FindPlayerHoldingPackage();
     if (targetP != nullptr) {
-        // 找到了拿着包裹的玩家，把他设为当前攻击目标
+        // set the player who has package as target
         currentTarget = targetP;
         return Success;
     }
@@ -310,6 +309,7 @@ BehaviourState RivalAI::AttemptGrab(float dt) {
 
     if (dist < 10.0f) {
         LookAt(currentTarget->GetTransform().GetPosition());
+
 		// throw current held item first
         GameObject* item = GetHeldItem();
         if(item){

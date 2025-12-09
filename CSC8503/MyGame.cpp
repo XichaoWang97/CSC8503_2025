@@ -150,33 +150,29 @@ void MyGame::UpdateGame(float dt) {
 }
 
 void MyGame::UpdateKeys() {
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
-			InitWorld(); //We can reset the simulation at any time with F1
-			selectionObject = nullptr;
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
-			InitCamera(); //F2 will reset the camera to a specific default place
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
-			useGravity = !useGravity; //Toggle gravity!
-			physics.UseGravity(useGravity);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
-			world.ShuffleConstraints(true);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
-			world.ShuffleConstraints(false);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
-			world.ShuffleObjects(true);
-		}
-		if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
-			world.ShuffleObjects(false);
-		}
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F1)) {
+		InitWorld(); //We can reset the simulation at any time with F1
+		selectionObject = nullptr;
 	}
-
-	// 如果有其他单机按键（如 F1, F2 等）也可以放这里
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F2)) {
+		InitCamera(); //F2 will reset the camera to a specific default place
+	}
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::G)) {
+		useGravity = !useGravity; //Toggle gravity!
+		physics.UseGravity(useGravity);
+	}
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F9)) {
+		world.ShuffleConstraints(true);
+	}
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F10)) {
+		world.ShuffleConstraints(false);
+	}
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F7)) {
+		world.ShuffleObjects(true);
+	}
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::F8)) {
+		world.ShuffleObjects(false);
+	}
 }
 
 void MyGame::InitCamera() {
@@ -320,8 +316,6 @@ StateGameObject* MyGame::AddPatrolEnemyToWorld(const Vector3& position, const Ve
 	character->GetTransform()
 		.SetScale(Vector3(meshSize, meshSize, meshSize))
 		.SetPosition(position);
-	character->SetResetPoint(position);
-	
 
 	character->SetRenderObject(new RenderObject(character->GetTransform(), enemyMesh, notexMaterial));
 	character->GetRenderObject()->SetColour(Vector4(1, 0, 0, 1)); // red color ENEMY
@@ -349,7 +343,8 @@ Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radi
 	float inverseMass = 0.5f;
 
 	Player* newplayer = new Player(&world);
-	
+	newplayer->SetInitPosition(position); // set initial position
+
 	SphereVolume* volume = new SphereVolume(radius * 0.5f); // set bounding volume
 	newplayer->SetBoundingVolume(volume);
 	
@@ -532,7 +527,7 @@ void MyGame::GetCoinLogic(Player* player, float dt) {
 		// collection radius 2.5f, need FragilePackage to collect
 		if (playerHeld) {
 			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
-				c->GetTransform().SetPosition(Vector3(0, -1000, 0)); // Sending it to the specific position, which means it is removed
+				c->GetRenderObject()->SetColour(Vector4(0, 0, 0, 0)); // Set it transparent, which means it is removed
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
 			}

@@ -69,6 +69,15 @@ namespace NCL::CSC8503 {
 			networkObject = newObject;
 		}
 
+		// New
+		void SetInitPosition(Vector3 position) {
+			InitPosition = position;
+		}
+		Vector3 GetInitPosition() {
+			return InitPosition;
+		}
+
+
 		const std::string& GetName() const 
 		{
 			return name;
@@ -115,6 +124,7 @@ namespace NCL::CSC8503 {
 		std::string			name;
 
 		Vector3				broadphaseAABB;
+		Vector3 InitPosition; // New
 	};
 }
 

@@ -230,20 +230,24 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 	}
 	else if (thisClient) {
-		switch (type) {
+		switch (type) { // IMPORTANT, update position of objects in the whole world (must have networked ID)!!!
+		// 接收全量状态 (Full_State) 或 增量状态 (Delta_State)
 		case BasicNetworkMessages::Full_State:
 		case BasicNetworkMessages::Delta_State: {
 			int objectID = -1;
+			// 1. 解析网络包中的物体 ID
 			if (type == Full_State) objectID = ((FullPacket*)payload)->objectID;
 			else objectID = ((DeltaPacket*)payload)->objectID;
 
-			// 遍历世界找到 ID 匹配的物体更新位置
+			// 2. 遍历本地游戏世界中的所有物体
 			std::vector<GameObject*>::const_iterator first;
 			std::vector<GameObject*>::const_iterator last;
 			world.GetObjectIterators(first, last);
 			for (auto i = first; i != last; ++i) {
 				NetworkObject* o = (*i)->GetNetworkObject();
+				// 3. 找到 NetworkID 匹配的物体
 				if (o && o->GetNetworkID() == objectID) {
+					// 4. 【关键步骤】调用 ReadPacket 读取位置和旋转数据并应用到物体上
 					o->ReadPacket(*payload);
 					break;
 				}
