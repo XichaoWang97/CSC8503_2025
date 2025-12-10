@@ -14,8 +14,10 @@ namespace NCL {
 			// collision event
             virtual void OnCollisionBegin(GameObject* otherObject) override;
 
+            void SetBroken(bool state) { isBroken = state; }
             bool IsBroken() const { return isBroken; }
             float GetHealth() const { return health; }
+            void SetHealth(float hp) { health = hp; }
 
             void Reset();
             virtual void Update(float dt) override;

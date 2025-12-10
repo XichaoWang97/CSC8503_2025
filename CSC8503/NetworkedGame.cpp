@@ -18,11 +18,15 @@ struct GlobalStatePacket : public GamePacket {
 	int playerScore; // score of player
 	bool useGravity;
 
-	// states
+	// player states
 	bool p2Connected;
 	bool p1Dead;
 	bool p2Dead;
 	int  gameOverReason;
+
+	// package states
+	float packageHealth;
+	bool  packageBroken;
 
 	GlobalStatePacket() {
 		type = GLOBAL_STATE_MSG;
@@ -31,6 +35,8 @@ struct GlobalStatePacket : public GamePacket {
 		p1Dead = false;
 		p2Dead = false;
 		gameOverReason = 0;
+		packageHealth = 100.0f;
+		packageBroken = false;
 	}
 };
 
@@ -226,6 +232,12 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	statePacket.gameOverReason = (int)this->gameOverReason; // MyGame::WinLoseLogic 算出来的
 	statePacket.p2Connected = isP2ConnectedServer;
 
+	// 同步包裹状态
+	if (packageObject) {
+		statePacket.packageHealth = packageObject->GetHealth();
+		statePacket.packageBroken = packageObject->IsBroken();
+	}
+
 	// 获取玩家死亡状态 (用于UI)
 	// 这一步虽然有点冗余，但为了发包方便可以保留，或者直接去读 players[i]->IsDead()
 	statePacket.p1Dead = false;
@@ -344,6 +356,27 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 		if (rival) rival->SetScore(packet->rivalScore);
 		this->score = packet->playerScore;
+		// 【新增】客户端处理包裹逻辑
+		if (packageObject) {
+			// 1. 同步血量 (为了让 UI 显示正确)
+			// 假设你的 FragileGameObject 有 SetHealth，没有的话需要加一个
+			// 或者直接操作 public 变量，这里假设你通过某种方式能设置它
+			packageObject->SetHealth(packet->packageHealth); 
+
+			// 2. 处理碎裂逻辑
+			if (packet->packageBroken) {
+				// 设置本地对象状态
+				packageObject->SetBroken(true); // 如果没有这个函数，需要去 FragileGameObject 加
+
+				// 【最关键的一步】强制持有者松手！
+				// 如果不松手，客户端会一直试图把包裹拉回手上，导致画面鬼畜
+				for (Player* p : players) {
+					if (p->GetHeldItem() == packageObject) {
+						p->ThrowHeldItem(Vector3(0, 0, 0)); // 只有松手了，位置同步才会平滑
+					}
+				}
+			}
+		}
 		// 同步游戏结束原因
 		GameOverReason serverReason = (GameOverReason)packet->gameOverReason;
 		if (!this->isGameWon && !this->isGameOver) {
