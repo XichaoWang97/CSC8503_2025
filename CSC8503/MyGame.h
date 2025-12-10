@@ -96,15 +96,15 @@ namespace NCL {
 
 			// pointers to specific game objects
 			GameObject* winZone = nullptr;  // destination
-			GameObject* puzzleDoor = nullptr;
-			GameObject* pressurePlate = nullptr;
-			GameObject* sphereStone = nullptr;
-			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
 			GameObject* coinBonus = nullptr;  // bonus coin
 			GooseNPC* goose = nullptr;
 			RivalAI* rival = nullptr;
 			FragileGameObject* packageObject = nullptr;
-			StateGameObject* patrolEnemy = nullptr;
+			std::vector<GameObject*> puzzleDoor;
+			std::vector<GameObject*> pressurePlate;
+			std::vector<GameObject*> sphereStone;
+			std::vector<GameObject*> cubeStone;  // cube to interact with pressure plate
+			std::vector<StateGameObject*> patrolEnemy;
 			
 			// players stored in a list
 			std::vector<Player*> players;

@@ -29,8 +29,9 @@ NavigationGrid::NavigationGrid(const std::string&filename) : NavigationGrid() {
 	infile >> gridHeight;
 
 	// Calculate grid offset to center the grid at world origin
-	gridOffset.x = -(gridWidth * nodeSize) / 2.0f;
-	gridOffset.z = -(gridHeight * nodeSize) / 2.0f;
+	// New---no offset
+	gridOffset.x = 0;
+	gridOffset.z = 0;
 
 	allNodes = new GridNode[gridWidth * gridHeight];
 

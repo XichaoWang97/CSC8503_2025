@@ -100,9 +100,11 @@ void MyGame::UpdateGame(float dt) {
 
 	PuzzleDoorLogic(dt); // Check Puzzle Door
 
-	if (sphereStone->GetTransform().GetPosition().y <= -100.0f) { // reset position of sphere stone if it is out of the world
-		Debug::Print("Sphere stone is resetted", Vector2(40, 55), Vector4(0, 0, 1, 1));
-		sphereStone->GetTransform().SetPosition(sphereStone->GetInitPosition());
+	for (auto* s : sphereStone) {
+		if (s->GetTransform().GetPosition().y <= -100.0f) {
+			Debug::Print("Sphere stone is resetted", Vector2(40, 55), Vector4(0, 0, 1, 1));
+			s->GetTransform().SetPosition(s->GetInitPosition());
+		}
 	}
 
 	Player* localPlayer = GetLocalPlayer(); // single player / player in servant
@@ -198,13 +200,20 @@ void MyGame::InitCamera() {
 
 void MyGame::InitWorld() {
 	score = 0;
-	gameDuration = 0.0f; // reset time
-	isTimerRunning = true; // time start running
+	gameDuration = 0.0f;
+	isTimerRunning = true;
 
 	world.ClearAndErase();
 	physics.Clear();
+
 	coins.clear();
 	players.clear();
+	puzzleDoor.clear();
+	pressurePlate.clear();
+	sphereStone.clear();
+	cubeStone.clear();
+	patrolEnemy.clear();
+
 	score = 0;
 	isGameOver = false;
 	isGameWon = false;
@@ -214,7 +223,7 @@ void MyGame::InitWorld() {
 }
 
 void MyGame::InitDefaultPlayer() {
-	Vector3 pos = Vector3(-60, 5, 60);
+	Vector3 pos = Vector3(0, 20, 0);
 	Player* p = AddPlayerToWorld(pos, 1.0f);
 
 	players.push_back(p); // add to players list
@@ -223,14 +232,16 @@ void MyGame::InitDefaultPlayer() {
 	// set player reference as target for rival and goose
 	if (rival) rival->SetPlayerList(&players);
 	if (goose) goose->SetPlayerList(&players);
-	if (patrolEnemy) patrolEnemy->SetPlayerList(&players);
+	for (auto* enemy : patrolEnemy) {
+		if (enemy) enemy->SetPlayerList(&players);
+	}
 }
 
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 	GameObject* floor = new GameObject("floor");
 
-	Vector3 floorSize = Vector3(400, 4, 400);
-	AABBVolume* volume = new AABBVolume(floorSize);
+	Vector3 floorSize = Vector3(320, 4, 200);
+	AABBVolume* volume = new AABBVolume(floorSize * 0.5f);
 	floor->SetBoundingVolume(volume);
 	floor->GetTransform()
 		.SetScale(floorSize)
@@ -484,47 +495,61 @@ void MyGame::SetCameraToPlayer(Player* player) {
 }
 
 void MyGame::PuzzleDoorLogic(float dt) {
-	if (!puzzleDoor || !pressurePlate) return;
-	bool isTriggered = false;
-	Vector3 platePos = pressurePlate->GetTransform().GetPosition();
-	Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
+	// 如果没有门或没有板，直接返回
+	if (puzzleDoor.empty() || pressurePlate.empty()) return;
 
-	auto CheckTrigger = [&](GameObject* obj) {
-		if (!obj) return false;
-		Vector3 pos = obj->GetTransform().GetPosition();
-		// check AABB
-		return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
-			pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
-			pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
-		};
+	// 假设门和压力板是一一对应的，取较小的那个数量进行循环
+	size_t count = std::min(puzzleDoor.size(), pressurePlate.size());
 
-	// if cubeStone is on the pressure plate
-	if (CheckTrigger(cubeStone)) {
-		isTriggered = true;
-	}
+	for (size_t i = 0; i < count; ++i) {
+		GameObject* currentDoor = puzzleDoor[i];
+		GameObject* currentPlate = pressurePlate[i];
 
-	// door movement
-	Vector3 doorPos = puzzleDoor->GetTransform().GetPosition();
-	float targetY = isTriggered ? -10.0f : 10.0f;
-	float doorSpeed = 20.0f;
+		bool isTriggered = false;
+		Vector3 platePos = currentPlate->GetTransform().GetPosition();
+		Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
 
-	if (abs(doorPos.y - targetY) > 0.01f) {
-		if (doorPos.y > targetY) {
-			doorPos.y -= doorSpeed * dt;
-			if (doorPos.y < targetY) doorPos.y = targetY;
+		// 定义检测函数（修改为直接使用传入的位置）
+		auto CheckTrigger = [&](GameObject* obj) {
+			if (!obj) return false;
+			Vector3 pos = obj->GetTransform().GetPosition();
+			return (pos.x > platePos.x - triggerSize.x && pos.x < platePos.x + triggerSize.x &&
+				pos.y > platePos.y - triggerSize.y && pos.y < platePos.y + triggerSize.y &&
+				pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
+			};
+
+		// 【修改】检查所有的 cubeStone 是否有任意一个在当前的板子上
+		for (auto* stone : cubeStone) {
+			if (CheckTrigger(stone)) {
+				isTriggered = true;
+				break; // 只要有一个石头在上面就触发
+			}
+		}
+
+		// 门的移动逻辑
+		Vector3 doorPos = currentDoor->GetTransform().GetPosition();
+		float targetY = isTriggered ? -8.0f : 6.0f; // 触发时向下，未触发向上
+		float doorSpeed = 20.0f;
+
+		if (abs(doorPos.y - targetY) > 0.01f) {
+			if (doorPos.y > targetY) {
+				doorPos.y -= doorSpeed * dt;
+				if (doorPos.y < targetY) doorPos.y = targetY;
+			}
+			else {
+				doorPos.y += doorSpeed * dt;
+				if (doorPos.y > targetY) doorPos.y = targetY;
+			}
+			currentDoor->GetTransform().SetPosition(doorPos);
+		}
+
+		// 变色逻辑
+		if (isTriggered) {
+			currentPlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
 		}
 		else {
-			doorPos.y += doorSpeed * dt;
-			if (doorPos.y > targetY) doorPos.y = targetY;
+			currentPlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
 		}
-		puzzleDoor->GetTransform().SetPosition(doorPos);
-	}
-
-	if (isTriggered) {
-		pressurePlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
-	}
-	else {
-		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // default yellow
 	}
 }
 
@@ -674,105 +699,116 @@ void MyGame::InitCourierLevel() {
 	if (!navGrid) {
 		navGrid = new NavigationGrid("TestGrid1.txt");
 	}
-	rival = AddRivalAIToWorld(Vector3(-55, 5, 0), 1.0f); // red color
-	goose = AddGooseNPCToWorld(Vector3(-60, 5, 0), 3.0f);
+	rival = AddRivalAIToWorld(Vector3(10, 5, 20), 1.0f);
+	goose = AddGooseNPCToWorld(Vector3(20, 5, 20), 3.0f);
 
-	// Add Enemy that patrols and targets the player
-	patrolEnemy = AddPatrolEnemyToWorld(Vector3(20, 4, 20), Vector3(20, 4, -20));
-	patrolEnemy->SetGameWorld(&world);
+	// Add patrol enemies
+	StateGameObject* enemy1 = AddPatrolEnemyToWorld(Vector3(50, 4, 10), Vector3(50, 4, 160));
+	StateGameObject* enemy2 = AddPatrolEnemyToWorld(Vector3(240, 5, 10), Vector3(240, 4, 160));
+	enemy1->SetGameWorld(&world);
+	enemy2->SetGameWorld(&world);
+	patrolEnemy.push_back(enemy1);
+	patrolEnemy.push_back(enemy2);
 
 	// Add packageObject
-	packageObject = new FragileGameObject("FragilePackage", Vector3(-50, 5, 60), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1)); // blue color
-	
+	packageObject = new FragileGameObject("FragilePackage", Vector3(20, 5, 160), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1));
 	world.AddGameObject(packageObject);
 	rival->SetFragilePackage(packageObject);
 
-	// Add Sphere and CubeStone
-	sphereStone = AddSphereToWorld(Vector3(-55, 5, 60), 2.0f, 1.0f); // test sphere above package
-	cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
+	// Add stone
+	sphereStone.push_back(AddSphereToWorld(Vector3(30, 5, 160), 2.0f, 1.0f));
+	sphereStone.push_back(AddSphereToWorld(Vector3(70, 5, 130), 2.0f, 1.0f));
+	sphereStone.push_back(AddSphereToWorld(Vector3(280, 5, 160), 2.0f, 1.0f));
+	cubeStone.push_back(AddCubeToWorld(Vector3(20, 5, 150), Vector3(1, 1, 1), 0.5f, "CubeStone"));
+	cubeStone.push_back(AddCubeToWorld(Vector3(200, 5, 30), Vector3(1, 1, 1), 0.5f, "CubeStone"));
 
-	// Add coins at various locations, mass = 0 for floating
-	AddCoinToWorld(Vector3(-50, 5, 55), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
-	AddCoinToWorld(Vector3(-50, 5, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
-	AddCoinToWorld(Vector3(10, 5, 10), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	// Add coins
+	AddCoinToWorld(Vector3(270, 5, 150), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(140, 5, 80), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
+	AddCoinToWorld(Vector3(20, 5, 20), Vector3(0.1f, 0.1f, 0.1f), 0.0f);
 
-	// Build terrain and obstacles
-	AddFloorToWorld(Vector3(0, -1, 0)); // floor
+	// Add floor
+	AddFloorToWorld(Vector3(145, -2, 85));
 
-	// walls
-	float wallHeight = 20.0f;
-	float boundarySize = 100.0f;
-	float wallThickness = 2.0f;
-
-	// obstacles
-	AddCubeToWorld(Vector3(-30, 10, 0), Vector3(2, 10, 40), 0.0f);
-	AddCubeToWorld(Vector3(40, 5, 20), Vector3(10, 5, 10), 0.0f);
-
-	// Destination zone, green area, now it is static
-	Vector3 targetPos = Vector3(60, 1, -60);
-	winZone = AddCubeToWorld(targetPos, Vector3(10, 0.5f, 10), 0.0f, "winZone");
+	// Add Win Zone
+	Vector3 targetPos = Vector3(260, 0, 20);
+	winZone = AddCubeToWorld(targetPos, Vector3(5, 0.5f, 5), 0.0f, "winZone");
 	if (winZone && winZone->GetRenderObject()) {
-		winZone->GetRenderObject()->SetColour(Vector4(0, 1, 0, 0.5f)); // set green with some transparency
+		winZone->GetRenderObject()->SetColour(Vector4(0, 1, 1, 0.5f));
 	}
 
-	// Pressure plate
-	pressurePlate = AddCubeToWorld(Vector3(0, 2, 40), Vector3(5, 0.5f, 5), 0.0f);
-	if (pressurePlate && pressurePlate->GetRenderObject()) {
-		pressurePlate->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1)); // yellow
+	// Add Pressure plate
+	GameObject* plate1 = AddCubeToWorld(Vector3(30, 0, 40), Vector3(5, 0.5f, 5), 0.0f);
+	if (plate1 && plate1->GetRenderObject()) {
+		plate1->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1));
 	}
-	// Door controlled by pressure plate
-	puzzleDoor = AddCubeToWorld(Vector3(60, 10, -30), Vector3(15, 10, 2), 0.0f);
-	if (puzzleDoor && puzzleDoor->GetRenderObject()) {
-		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // blue
+	pressurePlate.push_back(plate1);
+	GameObject* plate2 = AddCubeToWorld(Vector3(150, 0, 80), Vector3(5, 0.5f, 5), 0.0f);
+	if (plate2 && plate2->GetRenderObject()) {
+		plate2->GetRenderObject()->SetColour(Vector4(1, 1, 0, 1));
 	}
+	pressurePlate.push_back(plate2);
 
-	InitHedgeMaze(); // Maze
+	// Add Puzzle Door
+	GameObject* door1 = AddCubeToWorld(Vector3(60, 6, 10), Vector3(5, 6, 5), 0.0f);
+	if (door1 && door1->GetRenderObject()) {
+		door1->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1));
+	}
+	puzzleDoor.push_back(door1);
+	GameObject* door2 = AddCubeToWorld(Vector3(230, 6, 160), Vector3(5, 6, 5), 0.0f);
+	if (door2 && door2->GetRenderObject()) {
+		door2->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1));
+	}
+	puzzleDoor.push_back(door2);
+
+	InitHedgeMaze();
 }
 
 // Generate a maze
 void MyGame::InitHedgeMaze() {
 	// 1 = wall, 0 = road, 18 * 18 size
-	const int width = 18;
+	const int width = 30;
 	const int height = 18;
 	int mazeLayout[height][width] = {
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1},
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1},
-		{1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1},
-		{1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1},
-		{1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1},
-		{1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1},
-		{1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1},
-		{1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1}, // 注意：右下角留个口
-		{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1},
-		{1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1},
-		{1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1},
-		{1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1},
-		{1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0},
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+		{1, 0, 0, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 1, 1, 1, 0 ,1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1},
+		{1, 0, 1, 1, 1, 0 ,1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 1, 1, 1, 1, 1 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 
 	};
 	// 迷宫的基本参数
-	Vector3 startPos = Vector3(100, 5, -100); // 迷宫在世界中的起始位置（放在远处避免重叠）
+	Vector3 startPos = Vector3(0, 6, 0); // 迷宫在世界中的起始位置（放在远处避免重叠）
 	float cubeSize = 5.0f; // 墙壁方块的一半尺寸 (实际宽是 10)
-	Vector3 wallDim = Vector3(cubeSize, cubeSize, cubeSize);
+	Vector3 wallDim = Vector3(cubeSize, cubeSize * 1.2f, cubeSize);
 
 	for (int z = 0; z < height; ++z) {
 		for (int x = 0; x < width; ++x) {
 			if (mazeLayout[z][x] == 1) {
 				// 计算每个墙块的位置
-				// x * (cubeSize * 2) 是因为 cubeSize 是半长
 				Vector3 pos = startPos + Vector3(x * (cubeSize * 2), 0, z * (cubeSize * 2));
 
 				// 质量设为 0.0f 以使其静止
 				GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
 
 				// 设置颜色为深绿色，看起来像树篱
-				if (hedge->GetRenderObject()) {
-					hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
+				if (x >= 6 && x <= 23) {
+					if (hedge->GetRenderObject()) {
+						hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
+					}
 				}
 			}
 		}

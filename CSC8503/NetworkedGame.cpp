@@ -112,7 +112,9 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	// tell AI where is player
 	if (goose) goose->SetPlayerList(&players);
 	if (rival) rival->SetPlayerList(&players);
-	if (patrolEnemy) patrolEnemy->SetPlayerList(&players);
+	for (auto* enemy : patrolEnemy) {
+		if (enemy) enemy->SetPlayerList(&players);
+	}
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
@@ -161,7 +163,9 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 	// 【新增修复代码】告诉客户端的 AI 玩家列表在哪里（虽然它们主要是视觉表现）
 	if (goose) goose->SetPlayerList(&players);
 	if (rival) rival->SetPlayerList(&players);
-	if (patrolEnemy) patrolEnemy->SetPlayerList(&players);
+	for (auto* enemy : patrolEnemy) {
+		if (enemy) enemy->SetPlayerList(&players);
+	}
 }
 
 void NetworkedGame::UpdateGame(float dt) {
@@ -578,10 +582,9 @@ void NetworkedGame::InitDefaultPlayer() {
 void NetworkedGame::InitNetworkObjectToWorld() {
 	// we assume 0-4 to player
 	// start to allocate from 5
-	rival->SetNetworkObject(new NetworkObject(*rival, 5));
-	goose->SetNetworkObject(new NetworkObject(*goose, 6));
-	patrolEnemy->SetNetworkObject(new NetworkObject(*patrolEnemy, 7));
-	packageObject->SetNetworkObject(new NetworkObject(*packageObject, 8));;
+	if (rival) rival->SetNetworkObject(new NetworkObject(*rival, 5));
+	if (goose) goose->SetNetworkObject(new NetworkObject(*goose, 6));
+	if (packageObject) packageObject->SetNetworkObject(new NetworkObject(*packageObject, 7));
 
 	int idCounter = 10;
 	// allocate numbers to coins
@@ -590,8 +593,11 @@ void NetworkedGame::InitNetworkObjectToWorld() {
 			coin->SetNetworkObject(new NetworkObject(*coin, idCounter++));
 		}
 	}
-
-	// allocate to stones and cube stones
+	// allocate enemies
+	for (auto* enemy : patrolEnemy) {
+		enemy->SetNetworkObject(new NetworkObject(*enemy, idCounter++));
+	}
+	// allocate stones and cube stones
 	world.OperateOnContents([&](GameObject* o) {
 		// check objects by name
 		if (o->GetName() == "Stone" || o->GetName() == "CubeStone") {
@@ -599,7 +605,7 @@ void NetworkedGame::InitNetworkObjectToWorld() {
 				o->SetNetworkObject(new NetworkObject(*o, idCounter++));
 			}
 		}
-		});
+	});
 }
 
 // Override Functions Below-----------------------------~o(> v < )o
