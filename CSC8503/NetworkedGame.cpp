@@ -212,6 +212,48 @@ void NetworkedGame::UpdateAsServer(float dt) {
 			// 可以在这里广播消息告诉其他人 P2 掉了，如果有必要的话
 		}
 	}
+
+	// Cooperative Package Mechanics
+	if (packageObject && packageObject->GetPhysicsObject()) {
+		// Determine how many players are currently Online
+		int requiredGrabbers = 1; // Player 1 is always online (Host)
+		if (isP2ConnectedServer) {
+			requiredGrabbers = 2; // If P2 is connected, we need 2 people
+		}
+
+		// Count how many players are currently holding the package
+		int currentGrabbers = 0;
+		// Check Host (Player 0)
+		if (!players.empty() && players[0]->GetHeldItem() == packageObject) {
+			currentGrabbers++;
+		}
+		// Check Client (Player 1) - Only if connected
+		if (players.size() > 1 && isP2ConnectedServer) {
+			if (players[1]->GetHeldItem() == packageObject) {
+				currentGrabbers++;
+			}
+		}
+
+		// Check if Rival is holding it (Rival is strong, doesn't need help)
+		bool rivalHasIt = (rival && rival->GetHeldItem() == packageObject);
+
+		// Apply Physics State
+		if (rivalHasIt || currentGrabbers >= requiredGrabbers) {
+			// Make it movable (Normal Mass)
+			if (packageObject->GetPhysicsObject()->GetInverseMass() == 0.0f) {
+				packageObject->GetPhysicsObject()->SetInverseMass(1.0f);
+			}
+		}
+		else {
+			// Make it immovable (Infinite Mass)
+			// This allows players to grab it (attach constraint), but they can't pull it until the count is met
+			packageObject->GetPhysicsObject()->SetInverseMass(0.0f);
+			// Stop existing momentum so it doesn't slide if someone lets go
+			packageObject->GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+			packageObject->GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
+		}
+	}
+
 	// 只需要把 MyGame 算好的结果拿来发包
 	GlobalStatePacket statePacket;
 	statePacket.useGravity = useGravity;
@@ -500,7 +542,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {
 	// 计算生成位置，排排站
-	Vector3 pos = Vector3(-60 + (playerID * 10), 5, 60);
+	Vector3 pos = Vector3(0 + (playerID * 10), 20, 0);
 	Player* newPlayer = AddPlayerToWorld(pos, 1.0f);
 	// 设置 NetworkObject, NetworkID = playerID
 	newPlayer->SetNetworkObject(new NetworkObject(*newPlayer, playerID));

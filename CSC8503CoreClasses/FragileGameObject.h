@@ -27,6 +27,11 @@ namespace NCL {
 			int GetCollectionCount() const { return collectionCount; }
 			void IncreaseCollectionCount() { collectionCount++; }
 
+            // Package can be held by many players, so use int, not bool here
+            // and we always set the count by 1 or -1
+            void SetHeldByPlayer(int count) { HeldByPlayer += count; }
+            int GetHeldByPlayer() const { return HeldByPlayer; }
+
         protected:
             float health;
             float maxHealth;
@@ -34,6 +39,7 @@ namespace NCL {
 			bool isAttached;
             float timer = 0.0f;
 			int collectionCount;
+            int HeldByPlayer = 0;
         };
     }
 }

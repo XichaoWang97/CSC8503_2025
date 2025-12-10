@@ -36,6 +36,7 @@ namespace NCL::CSC8503 {
         void CalculatePath(Vector3 targetPos);
 		void LookAt(Vector3 targetPos); // look at target position
         void Jump();
+        float CalculatePathDistance(Vector3 startPos, Vector3 endPos);
 
 		// Behaviour Nodes:
         BehaviourState HasHighScore(float dt);      // 条件：分数够了吗？

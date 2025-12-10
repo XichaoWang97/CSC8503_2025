@@ -193,11 +193,62 @@ BehaviourState RivalAI::FindWinZone(float dt) {
 
 // find closest stone
 BehaviourState RivalAI::GetClosestStone(float dt) {
-    GameObject* stone = FindClosestObject("Stone");
-    if (stone) {
-        currentTarget = stone;
+    struct Candidate {
+        GameObject* obj;
+        float distSq; // 直线距离的平方（用来快速排序）
+    };
+    std::vector<Candidate> candidates;
+    Vector3 myPos = GetTransform().GetPosition();
+
+    // 1. 第一步：收集所有可能是石头的物体，计算直线距离
+    gameWorld->OperateOnContents([&](GameObject* o) {
+        if (!o->IsActive()) return;
+
+        // 包含 "Stone" 的物体
+        if (o->GetName() == "Stone" && o != GetHeldItem()) {
+            Vector3 diff = o->GetTransform().GetPosition() - myPos;
+            candidates.push_back({ o, Vector::LengthSquared(diff) });
+        }
+        });
+
+    if (candidates.empty()) return Failure;
+
+    // 2. 第二步：按直线距离排序 (由近到远)
+    // 这一步很快，比 A* 快得多
+    std::sort(candidates.begin(), candidates.end(),
+        [](const Candidate& a, const Candidate& b) {
+            return a.distSq < b.distSq;
+        });
+
+    // 3. 第三步：只对最近的 3 个候选者进行昂贵的寻路计算
+    // 为什么是 3 个？因为有可能直线最近的那个隔了一堵墙，
+    // 而直线第二近的那个就在门口。检查前 3-5 个通常足够覆盖这种情况。
+    GameObject* bestStone = nullptr;
+    float minNavDist = 99999.0f;
+
+    int checkCount = std::min((int)candidates.size(), 3); // 只检查前3个
+
+    for (int i = 0; i < checkCount; ++i) {
+        GameObject* obj = candidates[i].obj;
+
+        // 计算实际导航路径长度
+        float realPathDist = CalculatePathDistance(myPos, obj->GetTransform().GetPosition());
+
+        // 如果路径有效且更短
+        if (realPathDist < minNavDist) {
+            minNavDist = realPathDist;
+            bestStone = obj;
+        }
+    }
+
+    // 4. 设置目标
+    if (bestStone && minNavDist < 90000.0f) {
+        currentTarget = bestStone;
+        // Debug: 打印结果
+        // std::cout << "Selected Stone: " << bestStone->GetName() << " Path Dist: " << minNavDist << std::endl;
         return Success;
     }
+
     return Failure;
 }
 
@@ -376,4 +427,29 @@ bool RivalAI::IsOnGround() {
         if (collision.rayDistance < 1.1f) return true;
     }
     return false;
+}
+
+// Calculate distance using navigation method
+float RivalAI::CalculatePathDistance(Vector3 startPos, Vector3 endPos) {
+    if (!grid) return 99999.0f;
+
+    NavigationPath outPath;
+    // 使用 NCL 的 FindPath
+    bool found = grid->FindPath(startPos, endPos, outPath);
+
+    // 如果根本走不到（比如石头被封死了），返回无限大
+    if (!found) return 99999.0f;
+
+    float totalDist = 0.0f;
+    Vector3 currentPos = startPos;
+    Vector3 nextPos;
+
+    // 累加路径点之间的距离
+    while (outPath.PopWaypoint(nextPos)) {
+        totalDist += Vector::Length(nextPos - currentPos);
+        currentPos = nextPos;
+    }
+
+    // 加上最后一点到目标的距离（视具体 Path 实现而定，有时最后一点就是目标）
+    return totalDist;
 }

@@ -95,73 +95,74 @@ MyGame::~MyGame() {
 }
 
 void MyGame::UpdateGame(float dt) {
+	if (!isGameOver && !isGameWon) {
+		world.GetMainCamera().UpdateCamera(dt); // Update camera
 
-	world.GetMainCamera().UpdateCamera(dt); // Update camera
+		PuzzleDoorLogic(dt); // Check Puzzle Door
 
-	PuzzleDoorLogic(dt); // Check Puzzle Door
-
-	for (auto* s : sphereStone) {
-		if (s->GetTransform().GetPosition().y <= -100.0f) {
-			Debug::Print("Sphere stone is resetted", Vector2(40, 55), Vector4(0, 0, 1, 1));
-			s->GetTransform().SetPosition(s->GetInitPosition());
-		}
-	}
-
-	Player* localPlayer = GetLocalPlayer(); // single player / player in servant
-	if (localPlayer && packageObject) {
-		
-		if (isTimerRunning && !isGameOver && !isGameWon) { gameDuration += dt; } // Time Logic
-		if (Window::GetKeyboard()->KeyDown(KeyCodes::TAB)) { DrawHighScoreHUD(); } // press TAB to show rank
-		// show time
-		std::string timeStr;
-		FormatTime(gameDuration, timeStr);
-		Debug::Print("Time: " + timeStr, Vector2(75, 5), Vector4(1, 1, 1, 1));
-
-		SetCameraToPlayer(localPlayer); // camera follow player
-
-		// Show package health
-		float health = packageObject->GetHealth();
-		Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1); // change color based on health
-		Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
-
-		// for every player
-		for (Player* player : players) { 
-			PackageLogic(player, dt); // package logic
-			GetCoinLogic(player, dt); // Coin Collection
-			WinLoseLogic(player); // Win/Lose logic
-			player->Update(dt);
-		}
-
-		RivalLogic();
-
-		// Display score
-		std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
-		Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1); // score color change
-		Debug::Print(scoreText, Vector2(75, 10), scoreColor);
-		std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
-		Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
-
-		// Update Keys
-		UpdateKeys();
-
-		// Gravity status display
-		if (useGravity) {
-			Debug::Print("(G)ravity on", Vector2(5, 95), Debug::RED);
-		}
-		else {
-			Debug::Print("(G)ravity off", Vector2(5, 95), Debug::RED);
-		}
-
-		world.OperateOnContents(
-			[dt](GameObject* o) {
-				o->Update(dt);
+		for (auto* s : sphereStone) {
+			if (s->GetTransform().GetPosition().y <= -100.0f) {
+				Debug::Print("Sphere stone is resetted", Vector2(40, 55), Vector4(0, 0, 1, 1));
+				s->GetTransform().SetPosition(s->GetInitPosition());
 			}
-		);
+		}
 
-		// Update physics and world
-		physics.Update(dt);
-		world.UpdateWorld(dt);
+		Player* localPlayer = GetLocalPlayer(); // single player / player in servant
+		if (localPlayer && packageObject) {
+
+			if (isTimerRunning && !isGameOver && !isGameWon) { gameDuration += dt; } // Time Logic
+			if (Window::GetKeyboard()->KeyDown(KeyCodes::TAB)) { DrawHighScoreHUD(); } // press TAB to show rank
+			// show time
+			std::string timeStr;
+			FormatTime(gameDuration, timeStr);
+			Debug::Print("Time: " + timeStr, Vector2(75, 5), Vector4(1, 1, 1, 1));
+
+			SetCameraToPlayer(localPlayer); // camera follow player
+
+			// Show package health
+			float health = packageObject->GetHealth();
+			Vector4 col = (health > 50) ? Vector4(0, 1, 0, 1) : Vector4(1, 0, 0, 1); // change color based on health
+			Debug::Print("Package HP: " + std::to_string((int)health), Vector2(70, 90), col);
+
+			// for every player
+			for (Player* player : players) {
+				PackageLogic(player, dt); // package logic
+				GetCoinLogic(player, dt); // Coin Collection
+				WinLoseLogic(player); // Win/Lose logic
+				player->Update(dt);
+			}
+
+			RivalLogic();
+
+			// Display score
+			std::string scoreText = "Coins: " + std::to_string(score) + " / " + std::to_string(winningScore);
+			Vector4 scoreColor = (score >= winningScore) ? Vector4(0, 1, 0, 1) : Vector4(1, 1, 0, 1); // score color change
+			Debug::Print(scoreText, Vector2(75, 10), scoreColor);
+			std::string rivalScoreText = "Rival Coins: " + std::to_string(rival->GetScore());
+			Debug::Print(rivalScoreText, Vector2(70, 15), Debug::RED);
+
+			// Gravity status display
+			if (useGravity) {
+				Debug::Print("(G)ravity on", Vector2(5, 95), Debug::RED);
+			}
+			else {
+				Debug::Print("(G)ravity off", Vector2(5, 95), Debug::RED);
+			}
+
+			world.OperateOnContents(
+				[dt](GameObject* o) {
+					o->Update(dt);
+				}
+			);
+
+			// Update physics and world
+			physics.Update(dt);
+			world.UpdateWorld(dt);
+		}
 	}
+
+	// Update Keys
+	UpdateKeys();
 }
 
 void MyGame::UpdateKeys() {
@@ -285,6 +286,27 @@ GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, 
 	GameObject* cube = new GameObject(name);
 
 	AABBVolume* volume = new AABBVolume(dimensions);
+	cube->SetBoundingVolume(volume);
+
+	cube->GetTransform()
+		.SetPosition(position)
+		.SetScale(dimensions * 2.0f);
+
+	cube->SetRenderObject(new RenderObject(cube->GetTransform(), cubeMesh, checkerMaterial));
+	cube->SetPhysicsObject(new PhysicsObject(cube->GetTransform(), cube->GetBoundingVolume()));
+
+	cube->GetPhysicsObject()->SetInverseMass(inverseMass);
+	cube->GetPhysicsObject()->InitCubeInertia();
+
+	world.AddGameObject(cube);
+
+	return cube;
+}
+
+GameObject* MyGame::AddOBBCubeToWorld(const Vector3& position, Vector3 dimensions, float inverseMass, std::string name) {
+	GameObject* cube = new GameObject(name);
+
+	OBBVolume* volume = new OBBVolume(dimensions);
 	cube->SetBoundingVolume(volume);
 
 	cube->GetTransform()
@@ -719,8 +741,8 @@ void MyGame::InitCourierLevel() {
 	sphereStone.push_back(AddSphereToWorld(Vector3(30, 5, 160), 2.0f, 1.0f));
 	sphereStone.push_back(AddSphereToWorld(Vector3(70, 5, 130), 2.0f, 1.0f));
 	sphereStone.push_back(AddSphereToWorld(Vector3(280, 5, 160), 2.0f, 1.0f));
-	cubeStone.push_back(AddCubeToWorld(Vector3(20, 5, 150), Vector3(1, 1, 1), 0.5f, "CubeStone"));
-	cubeStone.push_back(AddCubeToWorld(Vector3(200, 5, 30), Vector3(1, 1, 1), 0.5f, "CubeStone"));
+	cubeStone.push_back(AddOBBCubeToWorld(Vector3(20, 5, 150), Vector3(1, 1, 1), 0.5f, "CubeStone"));
+	cubeStone.push_back(AddOBBCubeToWorld(Vector3(200, 5, 30), Vector3(1, 1, 1), 0.5f, "CubeStone"));
 
 	// Add coins
 	AddCoinToWorld(Vector3(270, 5, 150), Vector3(0.1f, 0.1f, 0.1f), 0.0f);

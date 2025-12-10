@@ -49,6 +49,16 @@ namespace NCL::CSC8503 {
                         if (fragilePackage->GetAttached() == false) {
                             AttachItem(target);
 							fragilePackage->SetAttached(true);
+                            if (this->GetName() == "Player") {
+                                fragilePackage->SetHeldByPlayer(1); // it is held by player
+                            }
+                        }
+                        else if (fragilePackage->GetAttached() == true && 
+                            this->GetName() == "Player" && fragilePackage->GetHeldByPlayer() > 0) {
+                            // players can hold the package at the same time
+                            AttachItem(target);
+                            fragilePackage->SetAttached(true);
+                            fragilePackage->SetHeldByPlayer(1);
                         }
                     }
                 }
@@ -69,6 +79,9 @@ namespace NCL::CSC8503 {
             item->GetPhysicsObject()->ApplyLinearImpulse(aimDir * throwForce);
             if (item->GetName() == "FragilePackage") {
 				fragilePackage->SetAttached(false);
+                if (this->GetName() == "Player") {
+                    fragilePackage->SetHeldByPlayer(-1);
+                }
             }
         }
 

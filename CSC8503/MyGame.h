@@ -78,7 +78,8 @@ namespace NCL {
 			// Add specific game objects to the world
 			GameObject* AddFloorToWorld(const NCL::Maths::Vector3& position);
 			GameObject* AddSphereToWorld(const NCL::Maths::Vector3& position, float radius, float inverseMass = 10.0f); // also as stones
-			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 10.0f, std::string name = "Terrain");
+			GameObject* AddCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 1.0f, std::string name = "Terrain");
+			GameObject* AddOBBCubeToWorld(const NCL::Maths::Vector3& position, NCL::Maths::Vector3 dimensions, float inverseMass = 1.0f, std::string name = "Terrain");
 			GameObject* AddCoinToWorld(const NCL::Maths::Vector3& position, Vector3 dimensions, float inverseMass = 1.0f);
 			StateGameObject* AddPatrolEnemyToWorld(const NCL::Maths::Vector3& position, const Vector3& patrolDestination);
 			Player* AddPlayerToWorld(const NCL::Maths::Vector3& position, float radius);

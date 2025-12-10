@@ -6,6 +6,7 @@
 #include "Window.h"
 #include "Maths.h"
 #include "Debug.h"
+#include <algorithm>
 using namespace NCL;
 
 bool CollisionDetection::RayPlaneIntersection(const Ray&r, const Plane&p, RayCollision& collisions) {
@@ -293,7 +294,7 @@ bool CollisionDetection::SphereIntersection(const SphereVolume& volumeA, const T
 	return false;
 }
 
-//AABB - Sphere Collision
+// AABB - Sphere Collision
 bool CollisionDetection::AABBSphereIntersection(const AABBVolume& volumeA, const Transform& worldTransformA,
 	const SphereVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
 	Vector3 boxSize = volumeA.GetHalfDimensions();
@@ -372,329 +373,290 @@ bool CollisionDetection::SphereCapsuleIntersection(
 bool CollisionDetection::OBBIntersection(const OBBVolume& volumeA, const Transform& worldTransformA,
 	const OBBVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
 
-	Vector3 centreA = worldTransformA.GetPosition();
-	Vector3 centreB = worldTransformB.GetPosition();
-	Vector3 halfSizeA = volumeA.GetHalfDimensions();
-	Vector3 halfSizeB = volumeB.GetHalfDimensions();
-
-	Quaternion qA = worldTransformA.GetOrientation();
-	Quaternion qB = worldTransformB.GetOrientation();
-
-	Matrix3 rotA = Quaternion::RotationMatrix<Matrix3>(qA);
-	Matrix3 rotB = Quaternion::RotationMatrix<Matrix3>(qB);
-
-	// OBB 的局部坐标轴（世界空间）
-	Vector3 A[3] = {
-		rotA * Vector3(1,0,0),
-		rotA * Vector3(0,1,0),
-		rotA * Vector3(0,0,1)
-	};
-
-	Vector3 B[3] = {
-		rotB * Vector3(1,0,0),
-		rotB * Vector3(0,1,0),
-		rotB * Vector3(0,0,1)
-	};
-
-	// === 2. 构造旋转矩阵 R = dot(Ai,Bj)，以及 t = B 在 A 局部空间中的中心偏移 ===
-	float R[3][3];
-	float absR[3][3];
-
 	const float EPSILON = 1e-6f;
+	auto Clamp = [&](float v, float a, float b)->float { if (v < a) return a; if (v > b) return b; return v; };
 
-	for (int i = 0; i < 3; ++i) {
-		for (int j = 0; j < 3; ++j) {
-			R[i][j] = Vector::Dot(A[i], B[j]);
-			absR[i][j] = std::fabs(R[i][j]); // don't add EPSILON here; handle numeric checks separately
+	// Centers
+	Vector3 cA = worldTransformA.GetPosition();
+	Vector3 cB = worldTransformB.GetPosition();
+
+	// Half-extents
+	Vector3 a = volumeA.GetHalfDimensions();
+	Vector3 b = volumeB.GetHalfDimensions();
+
+	// Orientation -> world axes
+	Quaternion qa = worldTransformA.GetOrientation();
+	Quaternion qb = worldTransformB.GetOrientation();
+	Matrix3 RA = Quaternion::RotationMatrix<Matrix3>(qa);
+	Matrix3 RB = Quaternion::RotationMatrix<Matrix3>(qb);
+
+	Vector3 Aaxes[3] = { RA * Vector3(1,0,0), RA * Vector3(0,1,0), RA * Vector3(0,0,1) };
+	Vector3 Baxes[3] = { RB * Vector3(1,0,0), RB * Vector3(0,1,0), RB * Vector3(0,0,1) };
+
+	// R matrix and absolute
+	float R[3][3], absR[3][3];
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			R[i][j] = Vector::Dot(Aaxes[i], Baxes[j]);
+			absR[i][j] = fabs(R[i][j]) + EPSILON;
 		}
 	}
 
-	Vector3 tWorld = centreB - centreA;
-	// t 用 A 的坐标系表示
-	Vector3 t(
-		Vector::Dot(tWorld, A[0]),
-		Vector::Dot(tWorld, A[1]),
-		Vector::Dot(tWorld, A[2])
-	);
+	// translation vector t expressed in A's frame
+	Vector3 tWorld = cB - cA;
+	float t[3] = { Vector::Dot(tWorld, Aaxes[0]), Vector::Dot(tWorld, Aaxes[1]), Vector::Dot(tWorld, Aaxes[2]) };
 
-	float minPenetration = FLT_MAX;
-	Vector3 bestAxis;     // 碰撞法线（世界空间）
+	// SAT tests, track minimum overlap and best axis
+	float minOverlap = FLT_MAX;
+	Vector3 bestAxis(0, 0, 0);
+	bool bestIsAxisA = false;
+	bool bestIsAxisB = false;
+	int bestIndexA = -1, bestIndexB = -1;
 
-	// Track which axis caused the min penetration: 0=A axis,1=B axis,2=cross
-	int bestAxisType = -1;
-	int bestAxisIndex = -1;
-
-	auto updateBestAxis = [&](const Vector3& axis, float penetration, int type, int index) {
-		if (penetration < minPenetration) {
-			minPenetration = penetration;
+	auto consider = [&](float overlap, const Vector3& axis, bool isA, bool isB, int ia, int ib) {
+		if (overlap < minOverlap) {
+			minOverlap = overlap;
 			bestAxis = axis;
-			bestAxisType = type;
-			bestAxisIndex = index;
+			bestIsAxisA = isA;
+			bestIsAxisB = isB;
+			bestIndexA = ia;
+			bestIndexB = ib;
 		}
 		};
 
-	// === 3. 15 个分离轴测试（3 + 3 + 9） ===
-	// --- 3.1 A 的三个轴 ---
-	for (int i = 0; i < 3; ++i) {
-		float ra = halfSizeA[i];
-		float rb =
-			halfSizeB.x * absR[i][0] +
-			halfSizeB.y * absR[i][1] +
-			halfSizeB.z * absR[i][2];
-
-		float dist = std::fabs(t[i]);
-		if (dist > ra + rb) {
-			return false; // 找到分离轴，没碰到
-		}
-
-		float penetration = (ra + rb) - dist;
-
-		// 用局部分量 t[i] 的符号决定法线方向（A 轴方向）
-		Vector3 axis = A[i];
-		if (t[i] < 0.0f) axis = -axis;
-		updateBestAxis(axis, penetration, 0, i);
+	// A axes
+	for (int i = 0; i < 3; i++) {
+		float ra = a[i];
+		float rb = b.x * absR[i][0] + b.y * absR[i][1] + b.z * absR[i][2];
+		float dist = fabs(t[i]);
+		float overlap = (ra + rb) - dist;
+		if (overlap <= 0.0f) return false;
+		consider(overlap, Aaxes[i], true, false, i, -1);
 	}
 
-	// --- 3.2 B 的三个轴 ---
-	for (int j = 0; j < 3; ++j) {
-		float rb = halfSizeB[j];
-		float ra =
-			halfSizeA.x * absR[0][j] +
-			halfSizeA.y * absR[1][j] +
-			halfSizeA.z * absR[2][j];
-
-		// 有符号投影 t 在 B 的轴方向上的值：
-		float distSigned =
-			t.x * R[0][j] +
-			t.y * R[1][j] +
-			t.z * R[2][j];
-		float dist = std::fabs(distSigned);
-
-		if (dist > ra + rb) {
-			return false; // 分离轴
-		}
-
-		float penetration = (ra + rb) - dist;
-
-		Vector3 axis = B[j];
-		if (distSigned < 0.0f) axis = -axis;
-		updateBestAxis(axis, penetration, 1, j);
+	// B axes
+	for (int j = 0; j < 3; j++) {
+		float ra = a.x * absR[0][j] + a.y * absR[1][j] + a.z * absR[2][j];
+		float dist = fabs(t[0] * R[0][j] + t[1] * R[1][j] + t[2] * R[2][j]);
+		float rb = b[j];
+		float overlap = (ra + rb) - dist;
+		if (overlap <= 0.0f) return false;
+		consider(overlap, Baxes[j], false, true, -1, j);
 	}
 
-	// --- 3.3 交叉轴 Ai x Bj（9 个） ---
-	for (int i = 0; i < 3; ++i) {
-		for (int j = 0; j < 3; ++j) {
-
-			// 交叉轴如果非常小，就说明两轴接近平行，可以跳过
-			Vector3 axis = Vector::Cross(A[i], B[j]);
-			float axisLenSq = Vector::Dot(axis, axis);
-			if (axisLenSq < EPSILON * EPSILON) {
-				continue;
+	// cross axes
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			int ip1 = (i + 1) % 3, ip2 = (i + 2) % 3;
+			int jp1 = (j + 1) % 3, jp2 = (j + 2) % 3;
+			float ra = a[ip1] * absR[ip2][j] + a[ip2] * absR[ip1][j];
+			float rb = b[jp1] * absR[i][jp2] + b[jp2] * absR[i][jp1];
+			float dist = fabs(t[ip2] * R[ip1][j] - t[ip1] * R[ip2][j]);
+			float overlap = (ra + rb) - dist;
+			if (overlap <= 0.0f) return false;
+			Vector3 axis = Vector::Cross(Aaxes[i], Baxes[j]);
+			float len = Vector::Length(axis);
+			if (len > EPSILON) {
+				axis = axis * (1.0f / len);
+				consider(overlap, axis, false, false, i, j);
 			}
-			axis = Vector::Normalise(axis);
-
-			float ra =
-				halfSizeA[(i + 1) % 3] * absR[(i + 2) % 3][j] +
-				halfSizeA[(i + 2) % 3] * absR[(i + 1) % 3][j];
-
-			float rb =
-				halfSizeB[(j + 1) % 3] * absR[i][(j + 2) % 3] +
-				halfSizeB[(j + 2) % 3] * absR[i][(j + 1) % 3];
-
-			// 带符号投影长度（用于方向判定）
-			float signedDist =
-				t[(i + 2) % 3] * R[(i + 1) % 3][j] -
-				t[(i + 1) % 3] * R[(i + 2) % 3][j];
-
-			float dist = std::fabs(signedDist);
-
-			if (dist > ra + rb) {
-				return false; // 分离轴
-			}
-
-			float penetration = (ra + rb) - dist;
-
-			// 使用 signedDist 的符号决定 axis 方向
-			if (signedDist < 0.0f) axis = -axis;
-			updateBestAxis(axis, penetration, 2, i * 3 + j);
 		}
 	}
 
-	// === 4. 没有分离轴 -> 有碰撞，用最小穿透轴作为法线 ===
-	Vector3 collisionNormal = Vector::Normalise(bestAxis);
-	float penetration = minPenetration;
+	// No separating axis -> collision
+	Vector3 normal = bestAxis;
+	if (Vector::Dot(cB - cA, normal) < 0.0f) normal = normal * -1.0f;
+	float penetrationFallback = minOverlap;
 
-	// === 5. 使用 clipping 生成 contact manifold（多点） ===
-
-	// helper: support point on OBB in given direction (world space)
-	auto SupportPointOBB = [](const Vector3& centre, const Vector3 axes[3], const Vector3& halfSize, const Vector3& dir) {
-		Vector3 result = centre;
-		for (int k = 0; k < 3; ++k) {
-			float sign = Vector::Dot(dir, axes[k]) > 0.0f ? 1.0f : -1.0f;
-			result += axes[k] * (sign * halfSize[k]);
-		}
-		return result;
+	// Helpers for face polygon generation and clipping
+	auto buildFacePolygon = [&](const Vector3 axes[3], const Vector3& center, const Vector3& half, int faceIndex, bool positiveNormal,
+		std::vector<Vector3>& outVerts, Vector3& faceCenter, Vector3& faceNormal) {
+			faceNormal = axes[faceIndex] * (positiveNormal ? 1.0f : -1.0f);
+			faceCenter = center + faceNormal * half[faceIndex];
+			int iu = (faceIndex + 1) % 3;
+			int iv = (faceIndex + 2) % 3;
+			Vector3 u = axes[iu] * half[iu];
+			Vector3 v = axes[iv] * half[iv];
+			outVerts.clear();
+			outVerts.push_back(faceCenter + u + v);
+			outVerts.push_back(faceCenter - u + v);
+			outVerts.push_back(faceCenter - u - v);
+			outVerts.push_back(faceCenter + u - v);
 		};
 
-	// helper: get 4 vertices of a face of an OBB (world space)
-	auto GetFaceVertices = [&](const Vector3& centre, const Vector3 axes[3], const Vector3& halfSize, int faceAxisIndex, int faceSign) {
-		Vector3 u = axes[(faceAxisIndex + 1) % 3] * halfSize[(faceAxisIndex + 1) % 3];
-		Vector3 v = axes[(faceAxisIndex + 2) % 3] * halfSize[(faceAxisIndex + 2) % 3];
-		Vector3 faceCenter = centre + axes[faceAxisIndex] * (faceSign * halfSize[faceAxisIndex]);
-
-		std::vector<Vector3> verts(4);
-		verts[0] = faceCenter + u + v;
-		verts[1] = faceCenter + u - v;
-		verts[2] = faceCenter - u - v;
-		verts[3] = faceCenter - u + v;
-		return verts;
-		};
-
-	// helper: clip polygon (list of Vector3) against a plane (planePoint + planeNormal). Keep side where dot(n, x - planePoint) <= 0
-	auto ClipPolygonAgainstPlane = [&](const std::vector<Vector3>& poly, const Vector3& planePoint, const Vector3& planeNormal) {
-		std::vector<Vector3> out;
-		if (poly.empty()) return out;
-		auto isInside = [&](const Vector3& p) {
-			return Vector::Dot(planeNormal, p - planePoint) <= 1e-6f; // tolerance
+	auto clipPolygonAgainstPlane = [&](const std::vector<Vector3>& inPoly, const Vector3& planePoint, const Vector3& planeNormal) {
+		std::vector<Vector3> outPoly;
+		if (inPoly.empty()) return outPoly;
+		auto isInside = [&](const Vector3& p)->bool {
+			return Vector::Dot(planeNormal, p - planePoint) <= 0.00001f;
+			};
+		auto intersect = [&](const Vector3& aP, const Vector3& bP)->Vector3 {
+			Vector3 ab = bP - aP;
+			float denom = Vector::Dot(planeNormal, ab);
+			if (fabs(denom) < 1e-8f) return aP;
+			float t = Vector::Dot(planeNormal, planePoint - aP) / denom;
+			t = Clamp(t, 0.0f, 1.0f);
+			return aP + ab * t;
 			};
 
-		for (size_t i = 0; i < poly.size(); ++i) {
-			Vector3 a = poly[i];
-			Vector3 b = poly[(i + 1) % poly.size()];
-			bool inA = isInside(a);
-			bool inB = isInside(b);
-			if (inA && inB) {
-				// both inside -> keep b
-				out.push_back(b);
-			}
-			else if (inA && !inB) {
-				// leaving -> push intersection
-				Vector3 ab = b - a;
-				float denom = Vector::Dot(planeNormal, ab);
-				if (fabs(denom) > 1e-8f) {
-					float tParam = Vector::Dot(planeNormal, planePoint - a) / denom;
-					tParam = std::clamp(tParam, 0.0f, 1.0f);
-					out.push_back(a + ab * tParam);
+		for (size_t i = 0; i < inPoly.size(); i++) {
+			Vector3 curr = inPoly[i];
+			Vector3 prev = inPoly[(i + inPoly.size() - 1) % inPoly.size()];
+			bool currIn = isInside(curr);
+			bool prevIn = isInside(prev);
+
+			if (currIn) {
+				if (!prevIn) {
+					Vector3 ip = intersect(prev, curr);
+					outPoly.push_back(ip);
 				}
+				outPoly.push_back(curr);
 			}
-			else if (!inA && inB) {
-				// entering -> push intersection and b
-				Vector3 ab = b - a;
-				float denom = Vector::Dot(planeNormal, ab);
-				if (fabs(denom) > 1e-8f) {
-					float tParam = Vector::Dot(planeNormal, planePoint - a) / denom;
-					tParam = std::clamp(tParam, 0.0f, 1.0f);
-					out.push_back(a + ab * tParam);
-				}
-				out.push_back(b);
-			} // else both out -> nothing
+			else if (prevIn) {
+				Vector3 ip = intersect(prev, curr);
+				outPoly.push_back(ip);
+			}
 		}
-		return out;
+		return outPoly;
 		};
 
-	// choose reference and incident box based on bestAxisType
-	Vector3 refCentre, incCentre;
-	const Vector3* refAxes = nullptr;
-	const Vector3* incAxes = nullptr;
-	Vector3 refHalfSize, incHalfSize;
-	int refFaceAxis = 0;
-	int refFaceSign = 1;
+	std::vector<Vector3> contactWorldPoints;
 
-	if (bestAxisType == 0) { // A's axis was reference
-		refCentre = centreA; refAxes = A; refHalfSize = halfSizeA;
-		incCentre = centreB; incAxes = B; incHalfSize = halfSizeB;
-		refFaceAxis = bestAxisIndex; // 0..2
-		refFaceSign = (Vector::Dot(collisionNormal, A[refFaceAxis]) > 0.0f) ? 1 : -1;
-	}
-	else if (bestAxisType == 1) { // B's axis was reference
-		refCentre = centreB; refAxes = B; refHalfSize = halfSizeB;
-		incCentre = centreA; incAxes = A; incHalfSize = halfSizeA;
-		refFaceAxis = bestAxisIndex; // 0..2
-		refFaceSign = (Vector::Dot(collisionNormal, B[refFaceAxis]) > 0.0f) ? 1 : -1;
-	}
-	else {
-		// edge-edge 情形：退回到单点支持点中点（pragmatic fallback）
-		Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
-		Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
-		Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
-		Vector3 localA = contactWorld - centreA;
-		Vector3 localB = contactWorld - centreB;
-		collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
-		return true;
-	}
+	// If best axis is face of A or B -> face-face clipping path
+	if (bestIsAxisA || bestIsAxisB) {
+		bool refIsA = bestIsAxisA;
+		int refIndex = refIsA ? bestIndexA : bestIndexB;
+		const Vector3* refAxes = refIsA ? Aaxes : Baxes;
+		const Vector3* incAxes = refIsA ? Baxes : Aaxes;
+		Vector3 refCenter = refIsA ? cA : cB;
+		Vector3 incCenter = refIsA ? cB : cA;
+		Vector3 refHalf = refIsA ? a : b;
+		Vector3 incHalf = refIsA ? b : a;
 
-	// 1) get reference face verts (4) in world space
-	std::vector<Vector3> refVerts = GetFaceVertices(refCentre, refAxes, refHalfSize, refFaceAxis, refFaceSign);
+		// Determine ref face normal pointing outward of reference box,
+		// orient it so it faces incident box
+		Vector3 refFaceNormal = refAxes[refIndex];
+		if (Vector::Dot(refFaceNormal, normal) < 0.0f) refFaceNormal = refFaceNormal * -1.0f;
 
-	// reference face plane
-	Vector3 refFaceCenter = refCentre + refAxes[refFaceAxis] * (refFaceSign * refHalfSize[refFaceAxis]);
-	Vector3 refNormal = refAxes[refFaceAxis] * (float)refFaceSign; // points outward from reference box
-	// ensure refNormal points from reference to incident (same direction as collisionNormal)
-	if (Vector::Dot(refNormal, collisionNormal) < 0.0f) {
-		refNormal = -refNormal;
-	}
+		// Build reference face polygon
+		std::vector<Vector3> refVerts;
+		Vector3 refFaceCenter, refFaceNormalOut;
+		Vector3 refAxesLocal[3] = { refAxes[0], refAxes[1], refAxes[2] };
+		buildFacePolygon(refAxesLocal, refCenter, refHalf, refIndex, Vector::Dot(refAxesLocal[refIndex], refFaceNormal) > 0.0f,
+			refVerts, refFaceCenter, refFaceNormalOut);
 
-	// 2) find incident face on incident box: the face whose normal is most opposite to refNormal
-	int incFaceAxis = 0;
-	int incFaceSign = 1;
-	float bestDot = FLT_MAX;
-	for (int i = 0; i < 3; ++i) {
-		float dPos = Vector::Dot(incAxes[i], refNormal);
-		if (dPos < bestDot) { bestDot = dPos; incFaceAxis = i; incFaceSign = 1; }
-		float dNeg = Vector::Dot(-incAxes[i], refNormal);
-		if (dNeg < bestDot) { bestDot = dNeg; incFaceAxis = i; incFaceSign = -1; }
-	}
-	// get incident face verts
-	std::vector<Vector3> incVerts = GetFaceVertices(incCentre, incAxes, incHalfSize, incFaceAxis, incFaceSign);
+		// Build incident face (choose face most anti-parallel to refFaceNormal)
+		int incBest = 0;
+		float bestDot = fabs(Vector::Dot(incAxes[0], refFaceNormal));
+		for (int i = 1; i < 3; i++) {
+			float d = fabs(Vector::Dot(incAxes[i], refFaceNormal));
+			if (d > bestDot) { bestDot = d; incBest = i; }
+		}
+		float dPos = Vector::Dot(incAxes[incBest], refFaceNormal);
+		bool incPositive = (dPos < 0.0f); // choose sign so incident face normal faces reference face
 
-	// 3) perform clipping: clip incident polygon by reference face edges
-	std::vector<Vector3> poly = incVerts; // start polygon (world space)
-	for (int i = 0; i < 4; ++i) {
-		Vector3 va = refVerts[i];
-		Vector3 vb = refVerts[(i + 1) % 4];
-		Vector3 edge = vb - va;
-		Vector3 edgeNormal = Vector::Normalise(Vector::Cross(refNormal, edge)); // inward
-		poly = ClipPolygonAgainstPlane(poly, va, edgeNormal);
-		if (poly.empty()) break;
-	}
+		std::vector<Vector3> incVerts;
+		Vector3 incFaceCenter, incFaceNormalOut;
+		Vector3 incAxesLocal[3] = { incAxes[0], incAxes[1], incAxes[2] };
+		buildFacePolygon(incAxesLocal, incCenter, incHalf, incBest, incPositive,
+			incVerts, incFaceCenter, incFaceNormalOut);
 
-	// 4) resulting polygon 'poly' are potential contact points (0..n). For each, compute penetration depth onto reference face
-	struct ContactCandidate { Vector3 p; float depth; };
-	std::vector<ContactCandidate> candidates;
-	for (const Vector3& p : poly) {
-		float depth = Vector::Dot(refNormal, refFaceCenter - p); // positive => penetrating
-		if (depth > 1e-4f) {
-			candidates.push_back({ p, depth });
+		// Clip incident polygon by reference face side planes
+		std::vector<Vector3> poly = incVerts;
+		for (int i = 0; i < 4 && !poly.empty(); i++) {
+			Vector3 v0 = refVerts[i];
+			Vector3 v1 = refVerts[(i + 1) % 4];
+			Vector3 edge = v1 - v0;
+			Vector3 planeNormal = Vector::Cross(edge, refFaceNormalOut);
+			float len = Vector::Length(planeNormal);
+			if (len > EPSILON) planeNormal = planeNormal * (1.0f / len);
+			else continue;
+			Vector3 planePoint = v0;
+			poly = clipPolygonAgainstPlane(poly, planePoint, planeNormal);
+		}
+
+		// If clipped polygon empty -> fallback to single contact
+		if (poly.empty()) {
+			float ra = a.x * fabs(Vector::Dot(Aaxes[0], normal)) +
+				a.y * fabs(Vector::Dot(Aaxes[1], normal)) +
+				a.z * fabs(Vector::Dot(Aaxes[2], normal));
+			float rb = b.x * fabs(Vector::Dot(Baxes[0], normal)) +
+				b.y * fabs(Vector::Dot(Baxes[1], normal)) +
+				b.z * fabs(Vector::Dot(Baxes[2], normal));
+			Vector3 contactA = cA + normal * ra;
+			Vector3 contactB = cB - normal * rb;
+			contactWorldPoints.push_back((contactA + contactB) * 0.5f);
+		}
+		else {
+			// For each vertex in poly compute penetration depth relative to reference face plane
+			std::vector<std::pair<float, Vector3>> depthPoints;
+			for (auto& p : poly) {
+				// depth = distance along refFaceNormalOut from point to plane (positive means penetrating)
+				float depth = -Vector::Dot(refFaceNormalOut, p - refFaceCenter);
+				if (depth > 0.00001f) depthPoints.emplace_back(depth, p);
+			}
+			// If none positive (numerical), use geometric average with fallback penetration
+			if (depthPoints.empty()) {
+				Vector3 avg(0, 0, 0);
+				for (auto& p : poly) avg += p;
+				avg = avg * (1.0f / (float)poly.size());
+				depthPoints.emplace_back(penetrationFallback, avg);
+			}
+
+			// sort by depth desc and pick up to 4 deepest points
+			std::sort(depthPoints.begin(), depthPoints.end(), [](const std::pair<float, Vector3>& A, const std::pair<float, Vector3>& B) {
+				return A.first > B.first;
+				});
+			size_t take = std::min((size_t)4, depthPoints.size());
+			for (size_t i = 0; i < take; i++) contactWorldPoints.push_back(depthPoints[i].second);
 		}
 	}
+	else {
+		// edge-edge or other case: single contact estimate
+		float ra = a.x * fabs(Vector::Dot(Aaxes[0], normal)) +
+			a.y * fabs(Vector::Dot(Aaxes[1], normal)) +
+			a.z * fabs(Vector::Dot(Aaxes[2], normal));
+		float rb = b.x * fabs(Vector::Dot(Baxes[0], normal)) +
+			b.y * fabs(Vector::Dot(Baxes[1], normal)) +
+			b.z * fabs(Vector::Dot(Baxes[2], normal));
+		Vector3 contactA = cA + normal * ra;
+		Vector3 contactB = cB - normal * rb;
+		contactWorldPoints.push_back((contactA + contactB) * 0.5f);
+	}
 
-	// 5) pick up to 4 deepest contact points
-	if (!candidates.empty()) {
-		std::sort(candidates.begin(), candidates.end(), [](const ContactCandidate& a, const ContactCandidate& b) {
-			return a.depth > b.depth;
-			});
-		int addCount = std::min((size_t)4, candidates.size());
-		for (int i = 0; i < addCount; ++i) {
-			Vector3 contactWorld = candidates[i].p;
-			float contactPenetration = candidates[i].depth;
-			Vector3 localA = contactWorld - centreA;
-			Vector3 localB = contactWorld - centreB;
-			collisionInfo.AddContactPoint(localA, localB, collisionNormal, contactPenetration);
-		}
+	// Add contacts to collisionInfo with per-point penetration (compute per-point depth when possible)
+	if (contactWorldPoints.empty()) {
+		// fallback single mid-point
+		Vector3 mid = (cA + cB) * 0.5f;
+		Vector3 localA = mid - cA;
+		Vector3 localB = mid - cB;
+		collisionInfo.AddContactPoint(localA, localB, normal, penetrationFallback);
 	}
 	else {
-		// fallback single contact (rare)
-		Vector3 pointOnA = SupportPointOBB(centreA, A, halfSizeA, collisionNormal);
-		Vector3 pointOnB = SupportPointOBB(centreB, B, halfSizeB, -collisionNormal);
-		Vector3 contactWorld = (pointOnA + pointOnB) * 0.5f;
-		Vector3 localA = contactWorld - centreA;
-		Vector3 localB = contactWorld - centreB;
-		collisionInfo.AddContactPoint(localA, localB, collisionNormal, penetration);
+		for (auto& pw : contactWorldPoints) {
+			// try to compute per-point penetration more accurately by projecting pw onto normal from both boxes' supports
+			// Compute signed distance from pw to reference along normal: use projection of pw onto normal from each box support
+			float projA = a.x * fabs(Vector::Dot(Aaxes[0], normal)) +
+				a.y * fabs(Vector::Dot(Aaxes[1], normal)) +
+				a.z * fabs(Vector::Dot(Aaxes[2], normal));
+			float projB = b.x * fabs(Vector::Dot(Baxes[0], normal)) +
+				b.y * fabs(Vector::Dot(Baxes[1], normal)) +
+				b.z * fabs(Vector::Dot(Baxes[2], normal));
+			float centerDist = Vector::Dot((cB - cA), normal);
+			float pointDepth = (projA + projB) - fabs(centerDist);
+			// As a safer per-point depth, we can recompute using the reference face plane if available:
+			// But for stability ensure positive:
+			float pen = pointDepth;
+			if (pen <= 0.0f) pen = penetrationFallback;
+
+			Vector3 localA = pw - cA;
+			Vector3 localB = pw - cB;
+			collisionInfo.AddContactPoint(localA, localB, normal, pen);
+		}
 	}
 
 	return true;
 }
-
 
 Matrix4 GenerateInverseView(const Camera &c) {
 	float pitch = c.GetPitch();
