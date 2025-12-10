@@ -292,7 +292,7 @@ namespace NCL {
 				Debug::Print("Press ESC to Return", Vector2(30, 50), Debug::WHITE);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-					// 【关键修改】调用 NetworkedGame 的方法来启动客户端
+					// 调用 NetworkedGame 的方法来启动客户端
 					netGame->StartAsClient(127, 0, 0, 1);
 
 					// 进入游戏循环状态

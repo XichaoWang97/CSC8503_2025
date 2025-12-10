@@ -100,6 +100,11 @@ void MyGame::UpdateGame(float dt) {
 
 	PuzzleDoorLogic(dt); // Check Puzzle Door
 
+	if (sphereStone->GetTransform().GetPosition().y <= -100.0f) { // reset position of sphere stone if it is out of the world
+		Debug::Print("Sphere stone is resetted", Vector2(40, 55), Vector4(0, 0, 1, 1));
+		sphereStone->GetTransform().SetPosition(sphereStone->GetInitPosition());
+	}
+
 	Player* localPlayer = GetLocalPlayer(); // single player / player in servant
 	if (localPlayer && packageObject) {
 		
@@ -244,7 +249,7 @@ GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 
 GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, float inverseMass) {
 	GameObject* sphere = new GameObject("Stone"); // changed name to Stone
-
+	
 	Vector3 sphereSize = Vector3(radius, radius, radius);
 	SphereVolume* volume = new SphereVolume(radius);
 	sphere->SetBoundingVolume(volume);
@@ -259,6 +264,7 @@ GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, floa
 	sphere->GetPhysicsObject()->SetInverseMass(inverseMass);
 	sphere->GetPhysicsObject()->InitSphereInertia();
 
+	sphere->SetInitPosition(position);
 	world.AddGameObject(sphere);
 
 	return sphere;
@@ -682,7 +688,7 @@ void MyGame::InitCourierLevel() {
 	rival->SetFragilePackage(packageObject);
 
 	// Add Sphere and CubeStone
-	AddSphereToWorld(Vector3(-55, 5, 60), 2.0f, 1.0f); // test sphere above package
+	sphereStone = AddSphereToWorld(Vector3(-55, 5, 60), 2.0f, 1.0f); // test sphere above package
 	cubeStone = AddCubeToWorld(Vector3(-45, 5, 60), Vector3(1, 1, 1), 0.5f, "CubeStone"); // test cubeStone, interact with pressurePlate
 
 	// Add coins at various locations, mass = 0 for floating
@@ -697,10 +703,6 @@ void MyGame::InitCourierLevel() {
 	float wallHeight = 20.0f;
 	float boundarySize = 100.0f;
 	float wallThickness = 2.0f;
-	AddCubeToWorld(Vector3(0, wallHeight, -boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
-	AddCubeToWorld(Vector3(0, wallHeight, boundarySize), Vector3(boundarySize, wallHeight, wallThickness), 0.0f);
-	AddCubeToWorld(Vector3(-boundarySize, wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
-	AddCubeToWorld(Vector3(boundarySize, wallHeight, 0), Vector3(wallThickness, wallHeight, boundarySize), 0.0f);
 
 	// obstacles
 	AddCubeToWorld(Vector3(-30, 10, 0), Vector3(2, 10, 40), 0.0f);
@@ -722,5 +724,57 @@ void MyGame::InitCourierLevel() {
 	puzzleDoor = AddCubeToWorld(Vector3(60, 10, -30), Vector3(15, 10, 2), 0.0f);
 	if (puzzleDoor && puzzleDoor->GetRenderObject()) {
 		puzzleDoor->GetRenderObject()->SetColour(Vector4(0, 0, 1, 1)); // blue
+	}
+
+	InitHedgeMaze(); // Maze
+}
+
+// Generate a maze
+void MyGame::InitHedgeMaze() {
+	// 1 = wall, 0 = road, 18 * 18 size
+	const int width = 18;
+	const int height = 18;
+	int mazeLayout[height][width] = {
+		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1},
+		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1},
+		{1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1},
+		{1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1},
+		{1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1},
+		{1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1},
+		{1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1},
+		{1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1}, // 注意：右下角留个口
+		{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1},
+		{1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1},
+		{1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1},
+		{1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1},
+		{1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1},
+		{1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+
+	};
+	// 迷宫的基本参数
+	Vector3 startPos = Vector3(100, 5, -100); // 迷宫在世界中的起始位置（放在远处避免重叠）
+	float cubeSize = 5.0f; // 墙壁方块的一半尺寸 (实际宽是 10)
+	Vector3 wallDim = Vector3(cubeSize, cubeSize, cubeSize);
+
+	for (int z = 0; z < height; ++z) {
+		for (int x = 0; x < width; ++x) {
+			if (mazeLayout[z][x] == 1) {
+				// 计算每个墙块的位置
+				// x * (cubeSize * 2) 是因为 cubeSize 是半长
+				Vector3 pos = startPos + Vector3(x * (cubeSize * 2), 0, z * (cubeSize * 2));
+
+				// 质量设为 0.0f 以使其静止
+				GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
+
+				// 设置颜色为深绿色，看起来像树篱
+				if (hedge->GetRenderObject()) {
+					hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
+				}
+			}
+		}
 	}
 }

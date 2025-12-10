@@ -13,7 +13,7 @@ FragileGameObject::FragileGameObject(const std::string& name, const Vector3& pos
     Rendering::Mesh* mesh, GameTechMaterial material, Vector4 colour) : GameObject(name) {
 	
 	// set properties
-    initialPosition = position;
+    InitPosition = position;
     maxHealth = 100.0f;
     health = maxHealth;
     isBroken = false;
@@ -103,7 +103,7 @@ void FragileGameObject::Reset() {
     timer = 0.0f;
 
 	// reset position and orientation
-    GetTransform().SetPosition(initialPosition);
+    GetTransform().SetPosition(InitPosition);
     GetTransform().SetOrientation(Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 	// colour
     if (GetRenderObject()) {

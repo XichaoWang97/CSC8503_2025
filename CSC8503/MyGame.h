@@ -92,11 +92,13 @@ namespace NCL {
 			virtual void PackageLogic(Player* player, float dt);
 			virtual void WinLoseLogic(Player* player);
 			virtual void RivalLogic();
+			void InitHedgeMaze();
 
 			// pointers to specific game objects
 			GameObject* winZone = nullptr;  // destination
 			GameObject* puzzleDoor = nullptr;
 			GameObject* pressurePlate = nullptr;
+			GameObject* sphereStone = nullptr;
 			GameObject* cubeStone = nullptr;  // cube to interact with pressure plate
 			GameObject* coinBonus = nullptr;  // bonus coin
 			GooseNPC* goose = nullptr;

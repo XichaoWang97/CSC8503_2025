@@ -19,7 +19,7 @@ GameServer::~GameServer()	{
 void GameServer::Shutdown() {
 	SendGlobalPacket(BasicNetworkMessages::Shutdown);
 	enet_host_destroy(netHandle);
-	netHandle = nullptr;
+	netHandle = nullptr; // New
 }
 
 bool GameServer::Initialise() {

@@ -58,6 +58,8 @@ namespace NCL::CSC8503 {
 		bool isP2ConnectedServer = false;
 
 		float jumpTimer = 0.0f;
+		float timeSinceLastP2Packet = 0.0f;
+
 		std::map<int, bool> lastJumpState;
 		std::map<int, int> stateIDs; // record last acknowledged state ID per client
 		std::map<int, GameObject*> serverPlayers; // ClientID -> PlayerObject

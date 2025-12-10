@@ -32,7 +32,6 @@ namespace NCL {
 			bool isAttached;
             float timer = 0.0f;
 			int collectionCount;
-			Vector3 initialPosition;
         };
     }
 }

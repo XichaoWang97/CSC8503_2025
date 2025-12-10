@@ -79,6 +79,7 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	gameOverReason = GameOverReason::None;
 	isGameOver = false;
 	isGameWon = false;
+	timeSinceLastP2Packet = 0.0f;
 	stateIDs.clear(); // 清空旧的包确认记录
 	Disconnect();
 
@@ -87,6 +88,7 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Received_State, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Player_Connected, this);
+	thisServer->RegisterPacketHandler(BasicNetworkMessages::Player_Disconnected, this);
 
 	InitWorld();
 	InitNetworkObjectToWorld();
@@ -190,7 +192,17 @@ void NetworkedGame::UpdateGame(float dt) {
 
 // Server Logic
 void NetworkedGame::UpdateAsServer(float dt) {
-	// 3. 只需要把 MyGame 算好的结果拿来发包
+	// 处理超时逻辑
+	if (isP2ConnectedServer) {
+		timeSinceLastP2Packet += dt;
+		// 如果超过 2.0 秒没收到 P2 的消息，强制断开
+		if (timeSinceLastP2Packet > 2.0f) {
+			std::cout << "Player 2 Timed Out (Heartbeat lost)!" << std::endl;
+			isP2ConnectedServer = false;
+			// 可以在这里广播消息告诉其他人 P2 掉了，如果有必要的话
+		}
+	}
+	// 只需要把 MyGame 算好的结果拿来发包
 	GlobalStatePacket statePacket;
 	statePacket.useGravity = useGravity;
 
@@ -251,6 +263,11 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (thisServer) {
+		// 只要收到来自 Client (source通常是0表示第一个客户端) 的包，就重置计时器
+		if (source == 0) {
+			timeSinceLastP2Packet = 0.0f;
+		}
+
 		BroadcastHighScores(); // send ranks
 		switch (type) {
 		case BasicNetworkMessages::Client_Update: {
@@ -263,6 +280,11 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		case BasicNetworkMessages::Player_Connected: { // p2 connected
 			isP2ConnectedServer = true;
 			BroadcastHighScores();
+			break;
+		}
+		case BasicNetworkMessages::Player_Disconnected: { // p2 disconnected
+			isP2ConnectedServer = false;
+			std::cout << "Player 2 Disconnected!" << std::endl;
 			break;
 		}
 		case BasicNetworkMessages::Received_State: {
@@ -527,7 +549,8 @@ void NetworkedGame::Disconnect() {
 		thisServer = nullptr;
 	}
 	if (thisClient) {
-		delete thisClient;
+		delete thisClient; // I added netHandle = nullptr in the deconstruction function in GameClient.cpp
+		// Otherwise, there should be no delete here, it will cause BUG! (Double Free)
 		thisClient = nullptr;
 	}
 	localPlayerID = -1;
