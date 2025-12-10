@@ -85,8 +85,9 @@ namespace NCL::CSC8503 {
             }
         }
 
-        // Check hold item
+        // Set/Check hold item
         GameObject* GetHeldItem() const { return heldItem; }
+        void SetHeldItemNetwork(GameObject* item) { heldItem = item; }
 
 		// Draw grapple line
         void DrawGrappleLine() {

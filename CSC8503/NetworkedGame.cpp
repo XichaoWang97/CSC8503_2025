@@ -28,6 +28,9 @@ struct GlobalStatePacket : public GamePacket {
 	float packageHealth;
 	bool  packageBroken;
 
+	int p1HeldItemID;
+	int p2HeldItemID;
+
 	GlobalStatePacket() {
 		type = GLOBAL_STATE_MSG;
 		size = sizeof(GlobalStatePacket) - sizeof(GamePacket);
@@ -37,6 +40,8 @@ struct GlobalStatePacket : public GamePacket {
 		gameOverReason = 0;
 		packageHealth = 100.0f;
 		packageBroken = false;
+		p1HeldItemID = -1; // -1 means nothing held
+		p2HeldItemID = -1;
 	}
 };
 
@@ -200,7 +205,6 @@ void NetworkedGame::UpdateGame(float dt) {
 	DrawNetworkHUD();
 }
 
-// Server Logic
 void NetworkedGame::UpdateAsServer(float dt) {
 	// 处理超时逻辑
 	if (isP2ConnectedServer) {
@@ -257,6 +261,20 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	// 只需要把 MyGame 算好的结果拿来发包
 	GlobalStatePacket statePacket;
 	statePacket.useGravity = useGravity;
+	// 【新增】获取玩家持有物品的 NetworkID
+	statePacket.p1HeldItemID = -1;
+	statePacket.p2HeldItemID = -1;
+	// 检查 Player 1 (Host)
+	if (!players.empty() && players[0]->GetHeldItem()) {
+		NetworkObject* no = players[0]->GetHeldItem()->GetNetworkObject();
+		if (no) statePacket.p1HeldItemID = no->GetNetworkID();
+	}
+
+	// 检查 Player 2 (Client)
+	if (players.size() > 1 && players[1]->GetHeldItem()) {
+		NetworkObject* no = players[1]->GetHeldItem()->GetNetworkObject();
+		if (no) statePacket.p2HeldItemID = no->GetNetworkID();
+	}
 
 	// 同步分数
 	if (rival) statePacket.rivalScore = rival->GetScore();
@@ -419,6 +437,37 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 				}
 			}
 		}
+		// 【新增】同步抓取线的视觉效果
+		if (thisClient) { // 只有客户端需要同步这个，服务器自己知道
+
+			// 定义一个 lambda 函数来根据 ID 查找物体
+			auto FindObjByID = [&](int id) -> GameObject* {
+				if (id == -1) return nullptr;
+				std::vector<GameObject*>::const_iterator first;
+				std::vector<GameObject*>::const_iterator last;
+				world.GetObjectIterators(first, last);
+				for (auto i = first; i != last; ++i) {
+					if ((*i)->GetNetworkObject() && (*i)->GetNetworkObject()->GetNetworkID() == id) {
+						return (*i);
+					}
+				}
+				return nullptr;
+				};
+
+			// 处理 Player 1 (服务器玩家)
+			if (!players.empty()) {
+				GameObject* heldItem = FindObjByID(packet->p1HeldItemID);
+				// 调用我们第一步写的新函数
+				players[0]->SetHeldItemNetwork(heldItem);
+			}
+
+			// 处理 Player 2 (自己/客户端玩家)
+			// 虽然本地有预测，但用服务器确认的数据覆盖会更准确
+			if (players.size() > 1) {
+				GameObject* heldItem = FindObjByID(packet->p2HeldItemID);
+				players[1]->SetHeldItemNetwork(heldItem);
+			}
+		}
 		// 同步游戏结束原因
 		GameOverReason serverReason = (GameOverReason)packet->gameOverReason;
 		if (!this->isGameWon && !this->isGameOver) {
@@ -479,54 +528,60 @@ void NetworkedGame::ServerProcessClientInput(int playerID, ClientPacket* packet)
 	playerObj->SetPlayerInput(inputs);
 }
 
-// Client Logic
+// NetworkedGame.cpp
+
 void NetworkedGame::UpdateAsClient(float dt) {
 	ClientPacket newPacket;
 	int forward = 0;
 	int right = 0;
 
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100; // Z-
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100; // Z+
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;   // X-
-	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) right += 100;   // X+
+	// 1. 采集输入用于发包 (这部分不变，发给服务器去移动)
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;
+	if (Window::GetKeyboard()->KeyDown(KeyCodes::D)) right += 100;
 
 	newPacket.axis[0] = forward;
 	newPacket.axis[1] = right;
-
 	newPacket.yaw = world.GetMainCamera().GetYaw();
-
 	newPacket.lastID = 0;
-
 	newPacket.buttonstates[0] = 0;
 	newPacket.buttonstates[1] = 0;
+
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 
+	// 2. 发包给服务器
+	thisClient->SendPacket(newPacket);
 
-	// 核心逻辑：除了发包给服务器，也要把这个输入应用到本地的 Player 身上，
-	// 这样本地 Player 才会执行射线检测和 DrawLine。
-	// 1. 获取本地玩家对象
+	// --- 修改开始：本地逻辑 ---
+
 	if (localPlayerID >= 0 && localPlayerID < players.size()) {
 		Player* localPlayer = players[localPlayerID];
 
 		if (localPlayer) {
-			// 2. 构造本地 Input 结构 (模仿 ServerProcessClientInput 的逻辑)
 			PlayerInputs inputs;
 
-			// 设置朝向 (射线方向依赖于此)
+			// 【关键修改 1】保留摄像机朝向 (为了让射线方向正确)
 			inputs.cameraYaw = world.GetMainCamera().GetYaw();
 
-			// 设置按键状态
+			// 【关键修改 2】保留攻击/跳跃按键 (为了触发射线检测/画线)
 			if (newPacket.buttonstates[0] > 0) inputs.jump = true;
-			if (newPacket.buttonstates[1] > 0) inputs.attack = true; // 主要是这个触发交互/射线
+			if (newPacket.buttonstates[1] > 0) inputs.attack = true;
 
-			// deal with inputs
-			bool wasIgnoring = localPlayer->GetIgnoreInput();
+			// 【关键修改 3】强制将移动轴设为 0！
+			// 这样 Player::PlayerControl 里的 "if (currentInputs.isMoving)" 就会跳过物理力的施加
+			// 但上面的 cameraYaw 和 attack 依然有效
+			inputs.axis = Vector3(0, 0, 0);
+			inputs.isMoving = false; // 明确告诉本地逻辑：不要移动！
+
 			localPlayer->SetIgnoreInput(false);
 			localPlayer->SetPlayerInput(inputs);
 		}
 	}
-	// check connection every second
+	// --- 修改结束 ---
+
+	// check connection every second (保持不变)
 	static float connectTimer = 0.0f;
 	connectTimer += dt;
 	if (connectTimer > 1.0f) {
@@ -536,8 +591,6 @@ void NetworkedGame::UpdateAsClient(float dt) {
 		thisClient->SendPacket(connectPacket);
 		connectTimer = 0.0f;
 	}
-
-	thisClient->SendPacket(newPacket);
 }
 
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {

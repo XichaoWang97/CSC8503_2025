@@ -274,7 +274,7 @@ bool CollisionDetection::AABBIntersection(const AABBVolume& volumeA, const Trans
 	return false;
 }
 
-//Sphere / Sphere Collision
+// Sphere / Sphere Collision
 bool CollisionDetection::SphereIntersection(const SphereVolume& volumeA, const Transform& worldTransformA,
 	const SphereVolume& volumeB, const Transform& worldTransformB, CollisionInfo& collisionInfo) {
 	float radii = volumeA.GetRadius() + volumeB.GetRadius();

@@ -726,14 +726,14 @@ void MyGame::InitCourierLevel() {
 
 	// Add patrol enemies
 	StateGameObject* enemy1 = AddPatrolEnemyToWorld(Vector3(50, 4, 10), Vector3(50, 4, 160));
-	StateGameObject* enemy2 = AddPatrolEnemyToWorld(Vector3(240, 5, 10), Vector3(240, 4, 160));
+	StateGameObject* enemy2 = AddPatrolEnemyToWorld(Vector3(240, 4, 10), Vector3(240, 4, 160));
 	enemy1->SetGameWorld(&world);
 	enemy2->SetGameWorld(&world);
 	patrolEnemy.push_back(enemy1);
 	patrolEnemy.push_back(enemy2);
 
 	// Add packageObject
-	packageObject = new FragileGameObject("FragilePackage", Vector3(20, 5, 160), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1));
+	packageObject = new FragileGameObject("FragilePackage", Vector3(20, 3, 160), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1));
 	world.AddGameObject(packageObject);
 	rival->SetFragilePackage(packageObject);
 

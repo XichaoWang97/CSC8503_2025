@@ -203,6 +203,8 @@ namespace NCL {
 
 				Debug::Print("Press ESC to Pause", Vector2(5, 5), Debug::YELLOW);
 				Debug::Print("Press 1 to Return to Main Menu", Vector2(5, 8), Debug::YELLOW);
+				Debug::Print("Press TAB to Check Rank", Vector2(5, 11), Debug::YELLOW);
+				Debug::Print("Press F1 to Restart Game", Vector2(5, 14), Debug::YELLOW);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					*newState = new PauseState(game);
@@ -245,7 +247,9 @@ namespace NCL {
 				}
 
 				Debug::Print("Multiplayer Mode", Vector2(5, 5), Debug::GREEN);
-				Debug::Print("Press ESC to Disconnect", Vector2(5, 10), Debug::WHITE);
+				Debug::Print("Press ESC to Disconnect", Vector2(5, 8), Debug::YELLOW);
+				Debug::Print("Press TAB to Check Rank", Vector2(5, 11), Debug::YELLOW);
+				
 				// check game over conditions
 				if (netGame->IsGameOver()) {
 					*newState = new DeadState(netGame, netGame->GetGameOverReason());
