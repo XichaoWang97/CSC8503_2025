@@ -65,6 +65,7 @@ namespace NCL::CSC8503 {
 		BehaviourNode* rootNode;
         NavigationPath currentPath;
         std::vector<Vector3> pathPoints;
+        Vector3 lastCalcTargetPos; // 记录上一次寻路时的目标位置
 
         int currentScore;
         int rivalWinningScore;

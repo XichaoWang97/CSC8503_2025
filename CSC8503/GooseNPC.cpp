@@ -8,9 +8,10 @@ using namespace CSC8503;
 
 GooseNPC::GooseNPC(NavigationGrid* _grid) : StateGameObject("Goose") {
     grid = _grid;
-	chaseSpeed = 2.5f; // chase speed of the goose
+	chaseSpeed = 3.0f; // speed of the goose
     rootNode = nullptr;
     timeSinceLastPathCalc = 0.0f;
+    lastCalcTargetPos = Vector3(99999, 99999, 99999);
     BuildBehaviourTree();
 }
 
@@ -42,11 +43,14 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
     Vector3 targetPos = playerTarget->GetTransform().GetPosition();
     Vector3 myPos = GetTransform().GetPosition();
 
-	// calculate path every second
-    timeSinceLastPathCalc += dt;
-    if (timeSinceLastPathCalc > 1.0f) {
+    // 目标位置发生了显著变化 (这里阈值设为 25.0f，即 5米的平方)
+    float distToLastTarget = Vector::LengthSquared(targetPos - lastCalcTargetPos);
+    bool targetMoved = distToLastTarget > 25.0f;
+
+    // 调用FindPath
+    if (targetMoved) {
         CalculatePathTo(targetPos);
-        timeSinceLastPathCalc = 0.0f;
+        lastCalcTargetPos = targetPos; // 更新记录
     }
 
     // move along the path
@@ -72,7 +76,7 @@ BehaviourState GooseNPC::ChasePlayer(float dt) {
     float distToNode = Vector::Length(dir);
 
 	// if close enough to waypoint, pop it, this paragrameter(distToNode) is very important for smooth movement
-    if (distToNode < 20.0f) {
+    if (distToNode < 10.0f) {
         pathPoints.erase(pathPoints.begin());
         return Ongoing;
     }

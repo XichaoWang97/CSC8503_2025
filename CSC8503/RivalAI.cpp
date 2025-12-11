@@ -19,6 +19,7 @@ RivalAI::RivalAI(GameWorld* world, NavigationGrid* _grid) : GameCharacter("Rival
     rivalWinningScore = 0;
     packageSpawnPos = Vector3(0, 0, 0); // 默认，需外部Set
     timeSinceLastPathCalc = 0.0f;
+    lastCalcTargetPos = Vector3(99999, 99999, 99999);
     BuildBehaviourTree();
     //  init like player
 }
@@ -289,11 +290,14 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
 		targetPos = packageSpawnPos; // if no target, go to camp point(start position of package)
     }
 
-	// calculate path periodically 1.0s per time
-    timeSinceLastPathCalc += dt;
-    if (timeSinceLastPathCalc > 1.0f) {
+    // 目标位置发生了显著变化
+    float distToLastTarget = Vector::LengthSquared(targetPos - lastCalcTargetPos);
+    bool targetMoved = distToLastTarget > 25.0f;
+
+    // 调用FindPath
+    if (targetMoved) {
         CalculatePath(targetPos);
-        timeSinceLastPathCalc = 0.0f;
+        lastCalcTargetPos = targetPos; // 更新“上次记录的位置”
     }
     
 	// if no path, go to the target directly
@@ -304,10 +308,6 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
             GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 15.0f); // set it slower than player
             LookAt(targetPos);
         }
-        /*else {
-            GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
-        }*/
-
         // Jump logic
         float yDiff = targetPos.y - myPos.y;
         dir.y = 0;
@@ -327,7 +327,7 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
     float distToNode = Vector::Length(dir);
 
 	// get to the point
-    if (distToNode < 10.0f) {
+    if (distToNode < 5.0f) {
         pathPoints.erase(pathPoints.begin()); 
         return Ongoing;
     }

@@ -618,7 +618,7 @@ void MyGame::WinLoseLogic(Player* player){
 	// Win Condition
 	if (!isGameWon && winZone) {
 		Vector3 zonePos = winZone->GetTransform().GetPosition();
-		Vector3 zoneSize = Vector3(10, 1, 10); // size of the target zone
+		Vector3 zoneSize = Vector3(5, 1, 5); // size of the target zone
 
 		Vector3 PackagePos = packageObject->GetTransform().GetPosition();
 
@@ -754,7 +754,7 @@ void MyGame::InitCourierLevel() {
 
 	// Add Win Zone
 	Vector3 targetPos = Vector3(260, 0, 20);
-	winZone = AddCubeToWorld(targetPos, Vector3(5, 0.5f, 5), 0.0f, "winZone");
+	winZone = AddCubeToWorld(targetPos, Vector3(5, 0.2f, 5), 0.0f, "winZone");
 	if (winZone && winZone->GetRenderObject()) {
 		winZone->GetRenderObject()->SetColour(Vector4(0, 1, 1, 0.5f));
 	}
@@ -812,6 +812,26 @@ void MyGame::InitHedgeMaze() {
 		{1, 1, 1, 1, 1, 1 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 
 	};
+	/*
+	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	x..................x...x.....x
+	x.....xxxxxxxxxxxx.x.x.x.....x
+	x.....x.x......x...x.x.x.....x
+	x.....x.x.xxxx...xxxxx.x.....x
+	x.....x.x....xxxxx.....x.....x
+	x.....x.xxxx.x.x.x.x.x.x.....x
+	x.....x....x.x.......xxx.....x
+	x.xxx.x.x.xx.x.xxxxx.x.x.xxx.x
+	x.xxx.x.x....x..x..x.x.x.xxx.x
+	x.....x.xxxxxxx.x..x.x.x.....x
+	x.....x...x.....xx.x...x.....x
+	x.....xxx.xxx.x.x....xxx.....x
+	x.....x.x...x.x.xx.xxx.x.....x
+	x.....x.xxx.x.x..x.....x.....x
+	x.....x.x...x.xx.xxx.xxx.....x
+	x.....x.......x....x.........x
+	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	*/
 	// 迷宫的基本参数
 	Vector3 startPos = Vector3(0, 6, 0); // 迷宫在世界中的起始位置（放在远处避免重叠）
 	float cubeSize = 5.0f; // 墙壁方块的一半尺寸 (实际宽是 10)

@@ -32,6 +32,7 @@ namespace NCL::CSC8503 {
         NavigationPath  currentPath;
         std::vector<Vector3> pathPoints;
 
+        Vector3 lastCalcTargetPos; // 记录上次寻路的目标位置
         float timeSinceLastPathCalc = 0.0f;
         float chaseSpeed;
     };

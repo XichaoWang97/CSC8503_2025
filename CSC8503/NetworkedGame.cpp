@@ -157,21 +157,26 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 	InitNetworkObjectToWorld();
 
 	localPlayerID = 1;
-	// 【核心逻辑】客户端也初始化容器, 根据数字初始化 Vector。
 	int estimatedPlayers = 2;
 
+	// no physics for everything
 	for (int i = 0; i < estimatedPlayers; ++i) {
 		GameObject* p = SpawnNetworkedPlayer(i);
 		if (i != localPlayerID) {
-			p->GetPhysicsObject()->SetInverseMass(0.0f); // no physics
+			p->GetPhysicsObject()->SetInverseMass(0.0f);
 		}
 	}
 	
-	// 处理 Goose/AI 的本地物理禁用
 	if (goose && goose->GetPhysicsObject()) goose->GetPhysicsObject()->SetInverseMass(0.0f);
 	if (rival && rival->GetPhysicsObject()) rival->GetPhysicsObject()->SetInverseMass(0.0f);
-
-	// 【新增修复代码】告诉客户端的 AI 玩家列表在哪里（虽然它们主要是视觉表现）
+	if (packageObject && packageObject->GetPhysicsObject()) packageObject->GetPhysicsObject()->SetInverseMass(0.0f);
+	world.OperateOnContents([&](GameObject* o) {
+		if (o->GetName() == "Stone" || o->GetName() == "CubeStone" || o->GetName() == "enemy") {
+			o->GetPhysicsObject()->SetInverseMass(0.0f);
+		}
+	});
+	
+	// 告诉客户端的 AI 玩家列表在哪里（虽然它们主要是视觉表现）
 	if (goose) goose->SetPlayerList(&players);
 	if (rival) rival->SetPlayerList(&players);
 	for (auto* enemy : patrolEnemy) {
@@ -201,7 +206,6 @@ void NetworkedGame::UpdateGame(float dt) {
 	// 3. 网络更新
 	if (thisServer) thisServer->UpdateServer();
 	if (thisClient) thisClient->UpdateClient();
-
 	DrawNetworkHUD();
 }
 
@@ -213,7 +217,6 @@ void NetworkedGame::UpdateAsServer(float dt) {
 		if (timeSinceLastP2Packet > 2.0f) {
 			std::cout << "Player 2 Timed Out (Heartbeat lost)!" << std::endl;
 			isP2ConnectedServer = false;
-			// 可以在这里广播消息告诉其他人 P2 掉了，如果有必要的话
 		}
 	}
 
@@ -316,6 +319,7 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	else {
 		BroadcastSnapshot(true);
 	}
+
 }
 
 void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
@@ -327,7 +331,6 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 	for (auto i = first; i != last; ++i) {
 		NetworkObject* o = (*i)->GetNetworkObject();
 		if (!o) continue;
-		std::cout << "Server sending packet for object ID: " << o->GetNetworkID() << std::endl;
 		int playerState = 0;
 		GamePacket* newPacket = nullptr;
 		if (o->WritePacket(&newPacket, deltaFrame, playerState)) {
@@ -397,7 +400,7 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 				NetworkObject* o = (*i)->GetNetworkObject();
 				// 3. 找到 NetworkID 匹配的物体
 				if (o && o->GetNetworkID() == objectID) {
-					// 4. 【关键步骤】调用 ReadPacket 读取位置和旋转数据并应用到物体上
+					// 4. 【关键步骤】调用 ReadPacket 读取位置和旋转数据并应用到物体上------------------------
 					o->ReadPacket(*payload);
 					break;
 				}
@@ -534,7 +537,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	ClientPacket newPacket;
 	int forward = 0;
 	int right = 0;
-
+	
 	// 1. 采集输入用于发包 (这部分不变，发给服务器去移动)
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100;
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100;
@@ -558,20 +561,11 @@ void NetworkedGame::UpdateAsClient(float dt) {
 
 	if (localPlayerID >= 0 && localPlayerID < players.size()) {
 		Player* localPlayer = players[localPlayerID];
-
 		if (localPlayer) {
 			PlayerInputs inputs;
 
-			// 【关键修改 1】保留摄像机朝向 (为了让射线方向正确)
-			inputs.cameraYaw = world.GetMainCamera().GetYaw();
-
-			// 【关键修改 2】保留攻击/跳跃按键 (为了触发射线检测/画线)
-			if (newPacket.buttonstates[0] > 0) inputs.jump = true;
-			if (newPacket.buttonstates[1] > 0) inputs.attack = true;
-
-			// 【关键修改 3】强制将移动轴设为 0！
+			// 强制将移动轴设为 0！
 			// 这样 Player::PlayerControl 里的 "if (currentInputs.isMoving)" 就会跳过物理力的施加
-			// 但上面的 cameraYaw 和 attack 依然有效
 			inputs.axis = Vector3(0, 0, 0);
 			inputs.isMoving = false; // 明确告诉本地逻辑：不要移动！
 
