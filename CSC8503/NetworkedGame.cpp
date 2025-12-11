@@ -82,7 +82,7 @@ NetworkedGame::~NetworkedGame() {
 }
 
 void NetworkedGame::StartAsServer(int playerCount) {
-	// 1. 【新增】强制重置本地网络状态标记
+	// 1. [New] Force reset local network state flags
 	ui_p1Dead = false;
 	ui_p2Dead = false;
 	ui_p2Connected = false;
@@ -91,11 +91,11 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	isGameOver = false;
 	isGameWon = false;
 	timeSinceLastP2Packet = 0.0f;
-	stateIDs.clear(); // 清空旧的包确认记录
+	stateIDs.clear(); // Clear old packet acknowledgement records
 	Disconnect();
 
 	thisServer = new GameServer(NetworkBase::GetDefaultPort(), 1); // if you need more clients, change the number here
-	// 注册处理: 客户端发来的输入包 + 确认包
+	// Register handlers: Input packets from client + Acknowledgement packets
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Client_Update, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Received_State, this);
 	thisServer->RegisterPacketHandler(BasicNetworkMessages::Player_Connected, this);
@@ -109,12 +109,12 @@ void NetworkedGame::StartAsServer(int playerCount) {
 	for (int i = 0; i < playerCount; ++i) {
 		GameObject* newPlayer = SpawnNetworkedPlayer(i);
 
-		// 记录到 Server 的 Map 中，方便通过 NetworkID 查找
+		// Record to Server's Map for easy lookup via NetworkID
 		serverPlayers[i] = newPlayer;
 	}
 	localPlayerID = 0; // server ID is 0 
 
-	// 允许主机玩家(ID 0)直接读取本地键盘，不再受 20Hz 网络频率限制, 这样 60fps 下每一帧都能响应操作
+	// Allow host player (ID 0) to read local keyboard directly, bypassing the 20Hz network limit, ensuring response every frame at 60fps
 	Player* localPlayer = (Player*)serverPlayers[localPlayerID];
 	if (localPlayer) {
 		localPlayer->SetIgnoreInput(false);
@@ -129,7 +129,7 @@ void NetworkedGame::StartAsServer(int playerCount) {
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
-	// 1. 【新增】强制重置本地网络状态标记
+	// 1. [New] Force reset local network state flags
 	ui_p1Dead = false;
 	ui_p2Dead = false;
 	ui_p2Connected = false;
@@ -137,7 +137,7 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 	gameOverReason = GameOverReason::None;
 	isGameOver = false;
 	isGameWon = false;
-	stateIDs.clear(); // 清空旧的包确认记录
+	stateIDs.clear(); // Clear old packet acknowledgement records
 
 	Disconnect();
 	thisClient = new GameClient();
@@ -166,7 +166,7 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 			p->GetPhysicsObject()->SetInverseMass(0.0f);
 		}
 	}
-	
+
 	if (goose && goose->GetPhysicsObject()) goose->GetPhysicsObject()->SetInverseMass(0.0f);
 	if (rival && rival->GetPhysicsObject()) rival->GetPhysicsObject()->SetInverseMass(0.0f);
 	if (packageObject && packageObject->GetPhysicsObject()) packageObject->GetPhysicsObject()->SetInverseMass(0.0f);
@@ -174,9 +174,9 @@ void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
 		if (o->GetName() == "Stone" || o->GetName() == "CubeStone" || o->GetName() == "enemy") {
 			o->GetPhysicsObject()->SetInverseMass(0.0f);
 		}
-	});
-	
-	// 告诉客户端的 AI 玩家列表在哪里（虽然它们主要是视觉表现）
+		});
+
+	// Tell the client side AI where the player list is (although they are mainly for visual representation)
 	if (goose) goose->SetPlayerList(&players);
 	if (rival) rival->SetPlayerList(&players);
 	for (auto* enemy : patrolEnemy) {
@@ -189,12 +189,12 @@ void NetworkedGame::UpdateGame(float dt) {
 		MyGame::UpdateGame(dt);
 	}
 
-	// 客户端逻辑：每帧都运行，确保不漏掉按键
+	// Client logic: Run every frame to ensure no keystrokes are missed
 	if (thisClient) {
 		UpdateAsClient(dt);
 	}
 
-	// 给客户端发包
+	// Send packets to client
 	timeToNextPacket -= dt;
 	if (timeToNextPacket <= 0.0f) {
 		if (thisServer) {
@@ -203,17 +203,17 @@ void NetworkedGame::UpdateGame(float dt) {
 		timeToNextPacket += 1.0f / 60.0f; // improve to 60Hz
 	}
 
-	// 3. 网络更新
+	// 3. Network update
 	if (thisServer) thisServer->UpdateServer();
 	if (thisClient) thisClient->UpdateClient();
 	DrawNetworkHUD();
 }
 
 void NetworkedGame::UpdateAsServer(float dt) {
-	// 处理超时逻辑
+	// Handle timeout logic
 	if (isP2ConnectedServer) {
 		timeSinceLastP2Packet += dt;
-		// 如果超过 2.0 秒没收到 P2 的消息，强制断开
+		// If no message from P2 for over 2.0 seconds, force disconnect
 		if (timeSinceLastP2Packet > 2.0f) {
 			std::cout << "Player 2 Timed Out (Heartbeat lost)!" << std::endl;
 			isP2ConnectedServer = false;
@@ -261,48 +261,48 @@ void NetworkedGame::UpdateAsServer(float dt) {
 		}
 	}
 
-	// 只需要把 MyGame 算好的结果拿来发包
+	// Just take the results calculated by MyGame to send packets
 	GlobalStatePacket statePacket;
 	statePacket.useGravity = useGravity;
-	// 【新增】获取玩家持有物品的 NetworkID
+	// [New] Get the NetworkID of the item held by the player
 	statePacket.p1HeldItemID = -1;
 	statePacket.p2HeldItemID = -1;
-	// 检查 Player 1 (Host)
+	// Check Player 1 (Host)
 	if (!players.empty() && players[0]->GetHeldItem()) {
 		NetworkObject* no = players[0]->GetHeldItem()->GetNetworkObject();
 		if (no) statePacket.p1HeldItemID = no->GetNetworkID();
 	}
 
-	// 检查 Player 2 (Client)
+	// Check Player 2 (Client)
 	if (players.size() > 1 && players[1]->GetHeldItem()) {
 		NetworkObject* no = players[1]->GetHeldItem()->GetNetworkObject();
 		if (no) statePacket.p2HeldItemID = no->GetNetworkID();
 	}
 
-	// 同步分数
+	// Sync score
 	if (rival) statePacket.rivalScore = rival->GetScore();
 
 	int currentPackageScore = 0;
 	if (packageObject) currentPackageScore = packageObject->GetCollectionCount();
 	statePacket.playerScore = 0;
-	// 检查 player 是否拿着包
-	if (!players.empty() && players[0]->GetHeldItem() == packageObject || 
+	// Check if player is holding the package
+	if (!players.empty() && players[0]->GetHeldItem() == packageObject ||
 		players.size() > 1 && players[1]->GetHeldItem() == packageObject) {
 		statePacket.playerScore = currentPackageScore;
 	}
 
-	// 直接读取 MyGame 的计算结果
-	statePacket.gameOverReason = (int)this->gameOverReason; // MyGame::WinLoseLogic 算出来的
+	// Read calculation results directly from MyGame
+	statePacket.gameOverReason = (int)this->gameOverReason; // Calculated by MyGame::WinLoseLogic
 	statePacket.p2Connected = isP2ConnectedServer;
 
-	// 同步包裹状态
+	// Sync package state
 	if (packageObject) {
 		statePacket.packageHealth = packageObject->GetHealth();
 		statePacket.packageBroken = packageObject->IsBroken();
 	}
 
-	// 获取玩家死亡状态 (用于UI)
-	// 这一步虽然有点冗余，但为了发包方便可以保留，或者直接去读 players[i]->IsDead()
+	// Get player death state (for UI)
+	// This step is a bit redundant, but kept for convenience in packet sending, or could read players[i]->IsDead() directly
 	statePacket.p1Dead = false;
 	statePacket.p2Dead = false;
 	if (!players.empty()) statePacket.p1Dead = players[0]->IsDead();
@@ -310,7 +310,7 @@ void NetworkedGame::UpdateAsServer(float dt) {
 
 	thisServer->SendGlobalPacket(statePacket);
 
-	// Snapshot 逻辑保持不变
+	// Snapshot logic remains unchanged
 	packetsToSnapshot--;
 	if (packetsToSnapshot < 0) {
 		BroadcastSnapshot(false);
@@ -342,7 +342,7 @@ void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
 
 void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (thisServer) {
-		// 只要收到来自 Client (source通常是0表示第一个客户端) 的包，就重置计时器
+		// Reset timer as long as a packet is received from Client (source is usually 0 for the first client)
 		if (source == 0) {
 			timeSinceLastP2Packet = 0.0f;
 		}
@@ -352,7 +352,7 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		case BasicNetworkMessages::Client_Update: {
 			// Server gets input of Client -> control relative Player
 			int playerIndex = source + 1;
-			
+
 			ServerProcessClientInput(playerIndex, (ClientPacket*)payload);
 			break;
 		}
@@ -384,23 +384,23 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 
 		switch (type) { // IMPORTANT, update position of objects in the whole world (must have networked ID)!!!
-		// 接收全量状态 (Full_State) 或 增量状态 (Delta_State)
+			// Receive Full State (Full_State) or Delta State (Delta_State)
 		case BasicNetworkMessages::Full_State:
 		case BasicNetworkMessages::Delta_State: {
 			int objectID = -1;
-			// 1. 解析网络包中的物体 ID
+			// 1. Parse object ID from network packet
 			if (type == Full_State) objectID = ((FullPacket*)payload)->objectID;
 			else objectID = ((DeltaPacket*)payload)->objectID;
 
-			// 2. 遍历本地游戏世界中的所有物体
+			// 2. Iterate through all objects in the local game world
 			std::vector<GameObject*>::const_iterator first;
 			std::vector<GameObject*>::const_iterator last;
 			world.GetObjectIterators(first, last);
 			for (auto i = first; i != last; ++i) {
 				NetworkObject* o = (*i)->GetNetworkObject();
-				// 3. 找到 NetworkID 匹配的物体
+				// 3. Find object matching NetworkID
 				if (o && o->GetNetworkID() == objectID) {
-					// 4. 【关键步骤】调用 ReadPacket 读取位置和旋转数据并应用到物体上------------------------
+					// 4. [Critical Step] Call ReadPacket to read position and rotation data and apply to the object ------------------------
 					o->ReadPacket(*payload);
 					break;
 				}
@@ -412,38 +412,38 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 	if (type == GLOBAL_STATE_MSG) {
 		GlobalStatePacket* packet = (GlobalStatePacket*)payload;
 
-		// 原有同步
+		// Original sync
 		if (this->useGravity != packet->useGravity) {
 			this->useGravity = packet->useGravity;
 			physics.UseGravity(this->useGravity);
 		}
 		if (rival) rival->SetScore(packet->rivalScore);
 		this->score = packet->playerScore;
-		// 【新增】客户端处理包裹逻辑
+		// [New] Client handles package logic
 		if (packageObject) {
-			// 1. 同步血量 (为了让 UI 显示正确)
-			// 假设你的 FragileGameObject 有 SetHealth，没有的话需要加一个
-			// 或者直接操作 public 变量，这里假设你通过某种方式能设置它
-			packageObject->SetHealth(packet->packageHealth); 
+			// 1. Sync health (for correct UI display)
+			// Assuming your Package has SetHealth, otherwise add one
+			// Or manipulate public variables directly, assuming you can set it somehow
+			packageObject->SetHealth(packet->packageHealth);
 
-			// 2. 处理碎裂逻辑
+			// 2. Handle fragmentation logic
 			if (packet->packageBroken) {
-				// 设置本地对象状态
-				packageObject->SetBroken(true); // 如果没有这个函数，需要去 FragileGameObject 加
+				// Set local object state
+				packageObject->SetBroken(true); // If this function doesn't exist, need to add it to Package
 
-				// 【最关键的一步】强制持有者松手！
-				// 如果不松手，客户端会一直试图把包裹拉回手上，导致画面鬼畜
+				// [Critical Step] Force the holder to let go!
+				// If not released, the client will keep trying to pull the package back, causing visual glitches
 				for (Player* p : players) {
 					if (p->GetHeldItem() == packageObject) {
-						p->ThrowHeldItem(Vector3(0, 0, 0)); // 只有松手了，位置同步才会平滑
+						p->ThrowHeldItem(Vector3(0, 0, 0)); // Position sync will only be smooth after letting go
 					}
 				}
 			}
 		}
-		// 【新增】同步抓取线的视觉效果
-		if (thisClient) { // 只有客户端需要同步这个，服务器自己知道
+		// [New] Sync visual effect of grapple line
+		if (thisClient) { // Only client needs to sync this, server already knows
 
-			// 定义一个 lambda 函数来根据 ID 查找物体
+			// Define a lambda function to find object by ID
 			auto FindObjByID = [&](int id) -> GameObject* {
 				if (id == -1) return nullptr;
 				std::vector<GameObject*>::const_iterator first;
@@ -457,21 +457,21 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 				return nullptr;
 				};
 
-			// 处理 Player 1 (服务器玩家)
+			// Handle Player 1 (Server Player)
 			if (!players.empty()) {
 				GameObject* heldItem = FindObjByID(packet->p1HeldItemID);
-				// 调用我们第一步写的新函数
+				// Call the new function we wrote in step 1
 				players[0]->SetHeldItemNetwork(heldItem);
 			}
 
-			// 处理 Player 2 (自己/客户端玩家)
-			// 虽然本地有预测，但用服务器确认的数据覆盖会更准确
+			// Handle Player 2 (Self/Client Player)
+			// Although there is local prediction, overwriting with server-confirmed data is more accurate
 			if (players.size() > 1) {
 				GameObject* heldItem = FindObjByID(packet->p2HeldItemID);
 				players[1]->SetHeldItemNetwork(heldItem);
 			}
 		}
-		// 同步游戏结束原因
+		// Sync game over reason
 		GameOverReason serverReason = (GameOverReason)packet->gameOverReason;
 		if (!this->isGameWon && !this->isGameOver) {
 			if (serverReason == GameOverReason::PlayerWin) {
@@ -490,44 +490,44 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			}
 		}
 
-		// [新增] 同步玩家死亡状态与连接状态
-		// 存下来用于 UI 绘制
+		// [New] Sync player death state and connection state
+		// Save for UI rendering
 		ui_p1Dead = packet->p1Dead;
 		ui_p2Dead = packet->p2Dead;
 		ui_p2Connected = packet->p2Connected;
 
-		// 更新本地 Player 对象状态 (可选，为了防止尸体还能动)
+		// Update local Player object state (optional, to prevent the corpse from moving)
 		if (!players.empty()) players[0]->SetDead(ui_p1Dead);
 		if (players.size() > 1) players[1]->SetDead(ui_p2Dead);
 	}
 }
 
 void NetworkedGame::ServerProcessClientInput(int playerID, ClientPacket* packet) {
-	// 查找对应的玩家对象
+	// Find corresponding player object
 	if (playerID < 0 || playerID >= players.size()) return;
 
-	// 强转为 Player* 以便调用 SetPlayerInput
+	// Cast to Player* to call SetPlayerInput
 	Player* playerObj = (Player*)players[playerID];
 	if (!playerObj) return;
 
-	// 构造输入状态
+	// Construct input state
 	PlayerInputs inputs;
 
-	// 解析轴向
+	// Parse axis
 	inputs.axis = Vector3(0, 0, 0);
 	if (packet->axis[0] != 0) inputs.axis.z = (float)packet->axis[0] / 100.0f;
 	if (packet->axis[1] != 0) inputs.axis.x = (float)packet->axis[1] / 100.0f;
 
 	if (Vector::LengthSquared(inputs.axis) > 0) inputs.isMoving = true;
 
-	// 解析摄像机角度
+	// Parse camera angle
 	inputs.cameraYaw = packet->yaw;
 
-	// 解析按键
+	// Parse keys
 	if (packet->buttonstates[0] > 0) inputs.jump = true;
 	if (packet->buttonstates[1] > 0) inputs.attack = true;
 
-	// 【关键】将网络包转化为 Player 的输入
+	// [Critical] Convert network packet to Player input
 	playerObj->SetPlayerInput(inputs);
 }
 
@@ -537,8 +537,8 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	ClientPacket newPacket;
 	int forward = 0;
 	int right = 0;
-	
-	// 1. 采集输入用于发包 (这部分不变，发给服务器去移动)
+
+	// 1. Collect input for packet sending (This part remains unchanged, sent to server for movement)
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100;
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100;
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;
@@ -554,28 +554,28 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 
-	// 2. 发包给服务器
+	// 2. Send packet to server
 	thisClient->SendPacket(newPacket);
 
-	// --- 修改开始：本地逻辑 ---
+	// --- Modification Start: Local Logic ---
 
 	if (localPlayerID >= 0 && localPlayerID < players.size()) {
 		Player* localPlayer = players[localPlayerID];
 		if (localPlayer) {
 			PlayerInputs inputs;
 
-			// 强制将移动轴设为 0！
-			// 这样 Player::PlayerControl 里的 "if (currentInputs.isMoving)" 就会跳过物理力的施加
+			// Force movement axis to 0!
+			// This way "if (currentInputs.isMoving)" in Player::PlayerControl will skip physics force application
 			inputs.axis = Vector3(0, 0, 0);
-			inputs.isMoving = false; // 明确告诉本地逻辑：不要移动！
+			inputs.isMoving = false; // Explicitly tell local logic: Do not move!
 
 			localPlayer->SetIgnoreInput(false);
 			localPlayer->SetPlayerInput(inputs);
 		}
 	}
-	// --- 修改结束 ---
+	// --- Modification End ---
 
-	// check connection every second (保持不变)
+	// check connection every second (keep unchanged)
 	static float connectTimer = 0.0f;
 	connectTimer += dt;
 	if (connectTimer > 1.0f) {
@@ -588,12 +588,12 @@ void NetworkedGame::UpdateAsClient(float dt) {
 }
 
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {
-	// 计算生成位置，排排站
-	Vector3 pos = Vector3(0 + (playerID * 10), 20, 0);
+	// Calculate spawn position, stand in a row
+	Vector3 pos = Vector3(0 + (playerID * 10), 20, 170);
 	Player* newPlayer = AddPlayerToWorld(pos, 1.0f);
-	// 设置 NetworkObject, NetworkID = playerID
+	// Set NetworkObject, NetworkID = playerID
 	newPlayer->SetNetworkObject(new NetworkObject(*newPlayer, playerID));
-	// 存入 MyGame 的 vector
+	// Save to MyGame's vector
 	players.push_back(newPlayer);
 
 	newPlayer->SetIgnoreInput(true);
@@ -640,7 +640,7 @@ void NetworkedGame::UpdateMinimumState() {
 // Auxiliary Functions-----------------------------~o(> v < )o
 
 void NetworkedGame::DrawNetworkHUD() {
-	float startX = 80.0f; // 屏幕右侧
+	float startX = 80.0f; // Right side of screen
 	float startY = 25.0f;
 
 	// Draw Player 1
@@ -727,7 +727,7 @@ void NetworkedGame::InitNetworkObjectToWorld() {
 				o->SetNetworkObject(new NetworkObject(*o, idCounter++));
 			}
 		}
-	});
+		});
 }
 
 // Override Functions Below-----------------------------~o(> v < )o

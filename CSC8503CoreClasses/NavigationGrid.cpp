@@ -102,6 +102,45 @@ bool NavigationGrid::FindPath(const Vector3& from, const Vector3& to, Navigation
 	GridNode* startNode = &allNodes[(fromZ * gridWidth) + fromX];
 	GridNode* endNode	= &allNodes[(toZ * gridWidth) + toX];
 
+	if (startNode->type == 'x') {
+		GridNode* bestAlternative = nullptr;
+		float bestDist = 99999.0f;
+
+		// Search a 3x3 area around the node
+		for (int i = -1; i <= 1; ++i) {
+			for (int j = -1; j <= 1; ++j) {
+				int neighbourX = fromX + i;
+				int neighbourZ = fromZ + j;
+
+				// Check grid boundaries
+				if (neighbourX >= 0 && neighbourX < gridWidth &&
+					neighbourZ >= 0 && neighbourZ < gridHeight) {
+
+					GridNode* neighbour = &allNodes[(neighbourZ * gridWidth) + neighbourX];
+
+					// Check if it is a floor node '.'
+					if (neighbour->type == '.') {
+						// We can find the one closest to the target (endNode) or the original position (from).
+						// Here, we choose the one closest to the original position.
+						float dist = Vector::LengthSquared(neighbour->position - from);
+						if (dist < bestDist) {
+							bestDist = dist;
+							bestAlternative = neighbour;
+						}
+					}
+				}
+			}
+		}
+
+		// If an alternative node is found, "teleport" the start node there for calculation
+		if (bestAlternative) {
+			startNode = bestAlternative;
+		}
+		else {
+			return false; // Surrounded by walls, completely stuck
+		}
+	}
+
 	std::vector<GridNode*>  openList;
 	std::vector<GridNode*>  closedList;
 

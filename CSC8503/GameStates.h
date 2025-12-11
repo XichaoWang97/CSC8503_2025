@@ -71,7 +71,7 @@ namespace NCL {
 			WinState(MyGame* g, bool networked = false) : game(g), isNetworked(networked) {
 				finalTime = game->GetGameDuration();
 
-				// 传入 isNetworked，检查对应的榜单
+				// Pass in isNetworked to check the corresponding leaderboard
 				isNewRecord = HighScoreManager::Instance().IsNewRecord(finalTime, isNetworked);
 
 				canInputName = !isNetworked || (isNetworked && ((NetworkedGame*)game)->GetServer() != nullptr);
@@ -83,9 +83,9 @@ namespace NCL {
 				game->UpdateGame(dt);  // it is necessary to update game here, make sure client can get the message after server win or lose
 				Debug::Print("MISSION SUCCESS!", Vector2(35, 30), Debug::GREEN);
 
-				// 显示时间
+				// Display Time
 				std::string timeStr;
-				game->FormatTime(finalTime, timeStr); // 假设你在 MyGame 把 FormatTime 设为 public 了
+				game->FormatTime(finalTime, timeStr); // Assume FormatTime is public in MyGame
 				Debug::Print("Time: " + timeStr, Vector2(40, 35), Debug::WHITE);
 
 				if (isNewRecord) {
@@ -95,16 +95,16 @@ namespace NCL {
 						Debug::Print("Enter Name: " + nameInput + "_", Vector2(30, 50), Debug::CYAN);
 						Debug::Print("Press ENTER to Submit", Vector2(30, 55), Debug::CYAN);
 
-						HandleNameInput(); // 调用输入函数
+						HandleNameInput(); // Call input handling function
 
 						if (Window::GetKeyboard()->KeyPressed(KeyCodes::RETURN)) {
 							if (nameInput.empty()) nameInput = "Unknown";
 
-							// 提交分数
+							// Submit score
 							HighScoreManager::Instance().AddScore(nameInput, finalTime, isNetworked);
 							hasSubmitted = true;
 
-							// 如果是服务器，广播给其他人
+							// If server, broadcast to others
 							if (isNetworked) {
 								((NetworkedGame*)game)->BroadcastHighScores();
 							}
@@ -153,7 +153,7 @@ namespace NCL {
 					nameInput.pop_back();
 				}
 
-				// 限制长度
+				// Limit length
 				if (nameInput.length() > 12) {
 					nameInput.pop_back();
 				}
@@ -203,8 +203,9 @@ namespace NCL {
 
 				Debug::Print("Press ESC to Pause", Vector2(5, 5), Debug::YELLOW);
 				Debug::Print("Press 1 to Return to Main Menu", Vector2(5, 8), Debug::YELLOW);
-				Debug::Print("Press TAB to Check Rank", Vector2(5, 11), Debug::YELLOW);
-				Debug::Print("Press F1 to Restart Game", Vector2(5, 14), Debug::YELLOW);
+				Debug::Print("Press 2 to show to Debug Volume", Vector2(5, 11), Debug::YELLOW);
+				Debug::Print("Press TAB to Check Rank", Vector2(5, 14), Debug::YELLOW);
+				Debug::Print("Press F1 to Restart Game", Vector2(5, 17), Debug::YELLOW);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::ESCAPE)) {
 					*newState = new PauseState(game);
@@ -240,16 +241,16 @@ namespace NCL {
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
 				netGame->UpdateGame(dt);
 
-				// 如果刚刚从结算界面退出来（gameFinished为true），则断开连接并返回主菜单
+				// If just returned from result screen (gameFinished is true), disconnect and return to main menu
 				if (gameFinished) {
-					netGame->Disconnect(); // 清理网络
-					return PushdownResult::Pop; // 回到 MainMenuState
+					netGame->Disconnect(); // Clear network
+					return PushdownResult::Pop; // Return to MainMenuState
 				}
 
 				Debug::Print("Multiplayer Mode", Vector2(5, 5), Debug::GREEN);
 				Debug::Print("Press ESC to Disconnect", Vector2(5, 8), Debug::YELLOW);
 				Debug::Print("Press TAB to Check Rank", Vector2(5, 11), Debug::YELLOW);
-				
+
 				// check game over conditions
 				if (netGame->IsGameOver()) {
 					*newState = new DeadState(netGame, netGame->GetGameOverReason());
@@ -286,8 +287,8 @@ namespace NCL {
 		public:
 			ClientGameState(NetworkedGame* g)
 				: netGame(g) {
-				// 不在这里创建 GameClient，而是让 NetworkedGame 去初始化
-				// 暂时注释掉这里的自动连接，改为在 Update 里按键触发，或者直接在这里调用
+				// Do not create GameClient here, let NetworkedGame initialize it
+				// Temporarily comment out auto-connect, change to key trigger in Update or call directly here
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
@@ -296,10 +297,10 @@ namespace NCL {
 				Debug::Print("Press ESC to Return", Vector2(30, 50), Debug::WHITE);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
-					// 调用 NetworkedGame 的方法来启动客户端
+					// Call NetworkedGame method to start client
 					netGame->StartAsClient(127, 0, 0, 1);
 
-					// 进入游戏循环状态
+					// Enter game loop state
 					*newState = new NetworkedGameState(netGame);
 					return PushdownResult::Push;
 				}
@@ -356,11 +357,20 @@ namespace NCL {
 			}
 
 			PushdownResult OnUpdate(float dt, PushdownState** newState) override {
-				Debug::Print("CSC8503 Coursework", Vector2(35, 20), Debug::CYAN);
-				Debug::Print("1. Start Single Player", Vector2(30, 40), Debug::WHITE);
-				Debug::Print("2. Host Network Game (Server)", Vector2(30, 45), Debug::WHITE);
-				Debug::Print("3. Join Network Game (Client)", Vector2(30, 50), Debug::WHITE);
-				Debug::Print("Esc. Exit Game", Vector2(30, 60), Debug::WHITE);
+				Debug::Print("CSC8503 Coursework", Vector2(33, 20), Debug::CYAN);
+				Debug::Print("1. Start Single Player", Vector2(30, 35), Debug::WHITE);
+				Debug::Print("2. Host Network Game (Server)", Vector2(30, 40), Debug::WHITE);
+				Debug::Print("3. Join Network Game (Client)", Vector2(30, 45), Debug::WHITE);
+				Debug::Print("Esc. Exit Game", Vector2(30, 50), Debug::WHITE);
+
+				// Controls Instruction
+				Debug::Print("--- Controls ---", Vector2(35, 70), Debug::CYAN);
+				Debug::Print("W/S: Move Fwd/Back", Vector2(5, 75), Debug::WHITE);
+				Debug::Print("A/D: Turn Left/Right", Vector2(5, 80), Debug::WHITE);
+				Debug::Print("Space: Jump", Vector2(5, 85), Debug::WHITE);
+				Debug::Print("Mouse: Rotate Camera", Vector2(55, 75), Debug::WHITE);
+				Debug::Print("LMB: Grab / Throw", Vector2(55, 80), Debug::WHITE);
+				Debug::Print("TAB: Toggle Leaderboard", Vector2(55, 85), Debug::WHITE);
 
 				if (Window::GetKeyboard()->KeyPressed(KeyCodes::NUM1)) {
 					*newState = new SinglePlayerState(game, world, physics, true);

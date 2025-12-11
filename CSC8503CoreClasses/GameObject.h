@@ -69,14 +69,17 @@ namespace NCL::CSC8503 {
 			networkObject = newObject;
 		}
 
-		// New
+		// New----------------
 		void SetInitPosition(Vector3 position) {
 			InitPosition = position;
 		}
+
 		Vector3 GetInitPosition() {
 			return InitPosition;
 		}
 
+		void ResetAfterFall();
+		//--------------------
 
 		const std::string& GetName() const 
 		{
@@ -93,7 +96,7 @@ namespace NCL::CSC8503 {
 
 		virtual void Update(float dt) 
 		{
-
+			ResetAfterFall();
 		}
 
 		bool GetBroadphaseAABB(Vector3&outsize) const;

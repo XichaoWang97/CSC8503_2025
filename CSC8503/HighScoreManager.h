@@ -18,15 +18,15 @@ public:
         return instance;
     }
 
-    // 两份数据
-    std::vector<ScoreEntry> spScores;  // 单机榜
-    std::vector<ScoreEntry> netScores; // 网络榜
+    // Two sets of data
+    std::vector<ScoreEntry> spScores;  // Single Player Leaderboard
+    std::vector<ScoreEntry> netScores; // Network Leaderboard
 
     const std::string spFileName = "highscores_sp.dat";
     const std::string netFileName = "highscores_net.dat";
 
     HighScoreManager() {
-        LoadScores(); // 启动时加载所有榜单
+        LoadScores(); // Load all leaderboards on startup
         InitDefaults(spScores);
         InitDefaults(netScores);
     }
@@ -39,19 +39,19 @@ public:
         }
     }
 
-    // 统一加载
+    // Unified load
     void LoadScores() {
         LoadList(spFileName, spScores);
         LoadList(netFileName, netScores);
     }
 
-    // 统一保存
+    // Unified save
     void SaveScores() {
         SaveList(spFileName, spScores);
         SaveList(netFileName, netScores);
     }
 
-    // 获取对应的列表引用
+    // Get reference to the corresponding list
     std::vector<ScoreEntry>& GetScores(bool isNetwork) {
         return isNetwork ? netScores : spScores;
     }
@@ -65,7 +65,7 @@ public:
     void AddScore(std::string name, float time, bool isNetwork) {
         auto& list = GetScores(isNetwork);
         AddScoreToList(list, name, time);
-        SaveScores(); // 保存更改
+        SaveScores(); // Save changes
     }
 
 private:
@@ -92,7 +92,7 @@ private:
             }
             in.close();
         }
-        // 再次排序确保安全
+        // Re-sort to ensure safety
         std::sort(list.begin(), list.end(), [](const ScoreEntry& a, const ScoreEntry& b) {
             return a.time < b.time;
             });

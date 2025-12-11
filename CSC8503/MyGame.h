@@ -2,7 +2,7 @@
 #pragma once
 #include "RenderObject.h"
 #include "StateGameObject.h"
-#include "FragileGameObject.h"
+#include "Package.h"
 #include "NavigationGrid.h"
 #include "GooseNPC.h"
 #include "RivalAI.h"
@@ -100,7 +100,7 @@ namespace NCL {
 			GameObject* coinBonus = nullptr;  // bonus coin
 			GooseNPC* goose = nullptr;
 			RivalAI* rival = nullptr;
-			FragileGameObject* packageObject = nullptr;
+			Package* packageObject = nullptr;
 			std::vector<GameObject*> puzzleDoor;
 			std::vector<GameObject*> pressurePlate;
 			std::vector<GameObject*> sphereStone;

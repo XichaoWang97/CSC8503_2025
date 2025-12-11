@@ -17,7 +17,7 @@ RivalAI::RivalAI(GameWorld* world, NavigationGrid* _grid) : GameCharacter("Rival
     moveSpeed = 10.0f;
     currentScore = 0;
     rivalWinningScore = 0;
-    packageSpawnPos = Vector3(0, 0, 0); // 默认，需外部Set
+    packageSpawnPos = Vector3(0, 0, 0); // Default, needs external Set
     timeSinceLastPathCalc = 0.0f;
     lastCalcTargetPos = Vector3(99999, 99999, 99999);
     BuildBehaviourTree();
@@ -29,12 +29,12 @@ RivalAI::~RivalAI() {
 }
 
 void RivalAI::Update(float dt) {
-	actionCooldown -= dt; // General action cooldown
-    
+    actionCooldown -= dt; // General action cooldown
+
     if (jumpCooldown > 0.0f) { // Jump cooldown update
         jumpCooldown -= dt;
     }
-	
+
     if (rootNode) { // Execute behaviour tree
         rootNode->Execute(dt);
     }
@@ -43,21 +43,21 @@ void RivalAI::Update(float dt) {
 }
 
 void RivalAI::BuildBehaviourTree() {
-    // --- 1. 胜利逃跑分支 (Survival) ---
+    // --- 1. Win & Run Branch (Survival) ---
     BehaviourSequence* seqRunAway = new BehaviourSequence("Survival Mode");
     seqRunAway->AddChild(new BehaviourAction("Check Score", [&](float dt, BehaviourState s) { return HasHighScore(dt); }));
     seqRunAway->AddChild(new BehaviourAction("Check Package", [&](float dt, BehaviourState s) { return IsHoldingPackage(dt); }));
     seqRunAway->AddChild(new BehaviourAction("Set Win Target", [&](float dt, BehaviourState s) { return FindWinZone(dt); }));
     seqRunAway->AddChild(new BehaviourAction("Move To Exit", [&](float dt, BehaviourState s) { return MoveToTarget(dt); }));
 
-    // --- 2. 拦截玩家分支 (Intercept) ---
-    // 2.1 攻击子分支
+    // --- 2. Intercept Player Branch (Intercept) ---
+    // 2.1 Attack Sub-branch
     BehaviourSequence* seqAttack = new BehaviourSequence("Attack Player");
     seqAttack->AddChild(new BehaviourAction("Check Stone", [&](float dt, BehaviourState s) { return IsHoldingStone(dt); }));
-    // 这里借用 ThrowAtPlayer 内部包含移动接近逻辑，或者你可以拆分开 MoveToPlayer -> Throw
+    // Here we borrow ThrowAtPlayer which contains move-close logic internally, or you can split it into MoveToPlayer -> Throw
     seqAttack->AddChild(new BehaviourAction("Throw Logic", [&](float dt, BehaviourState s) { return ThrowAtPlayer(dt); }));
 
-    // 2.2 找石头子分支
+    // 2.2 Find Stone Sub-branch
     BehaviourSequence* seqGetWeapon = new BehaviourSequence("Find Weapon");
     seqGetWeapon->AddChild(new BehaviourAction("Locate Stone", [&](float dt, BehaviourState s) { return GetClosestStone(dt); }));
     seqGetWeapon->AddChild(new BehaviourAction("Move Stone", [&](float dt, BehaviourState s) { return MoveToTarget(dt); }));
@@ -71,25 +71,25 @@ void RivalAI::BuildBehaviourTree() {
     seqIntercept->AddChild(new BehaviourAction("Check Enemy", [&](float dt, BehaviourState s) { return DoesPlayerHavePackage(dt); }));
     seqIntercept->AddChild(selWeapon);
 
-    // --- 3. 贪婪收集分支 (Greedy) ---
+    // --- 3. Greedy Collection Branch (Greedy) ---
     BehaviourSequence* seqGreedy = new BehaviourSequence("Greedy Mode");
     seqGreedy->AddChild(new BehaviourAction("Check Pkg", [&](float dt, BehaviourState s) { return IsHoldingPackage(dt); }));
     seqGreedy->AddChild(new BehaviourAction("Locate Coin", [&](float dt, BehaviourState s) { return GetClosestCoin(dt); }));
     seqGreedy->AddChild(new BehaviourAction("Move Coin", [&](float dt, BehaviourState s) { return MoveToTarget(dt); }));
-    // 走到金币处MyGame通常会处理收集，所以不需要Grab
+    // MyGame usually handles collection when walking to the coin, so Grab is not needed
 
-    // --- 4. 争夺/守点分支 (Scavenge) ---
+    // --- 4. Scavenge/Camp Branch (Scavenge) ---
     BehaviourSequence* seqScavenge = new BehaviourSequence("Scavenge Mode");
     seqScavenge->AddChild(new BehaviourAction("Find Pkg/Spot", [&](float dt, BehaviourState s) { return GetPackageOrCamp(dt); }));
     seqScavenge->AddChild(new BehaviourAction("Move Pkg", [&](float dt, BehaviourState s) { return MoveToTarget(dt); }));
     seqScavenge->AddChild(new BehaviourAction("Grab Pkg", [&](float dt, BehaviourState s) { return AttemptGrab(dt); }));
 
-    // --- 根节点 ---
+    // --- Root Node ---
     BehaviourSelector* root = new BehaviourSelector("Rival Root");
-    root->AddChild(seqRunAway);  // 优先级1：赢了赶紧跑
-    root->AddChild(seqIntercept); // 优先级2：没赢但玩家拿着，打他
-    root->AddChild(seqGreedy);    // 优先级3：我拿着，去捡钱
-    root->AddChild(seqScavenge);  // 优先级4：没人拿着，去抢
+    root->AddChild(seqRunAway);  // Priority 1: Won, run away quickly
+    root->AddChild(seqIntercept); // Priority 2: Not won but player has it, attack him
+    root->AddChild(seqGreedy);    // Priority 3: I have it, go pick up money
+    root->AddChild(seqScavenge);  // Priority 4: No one has it, go grab it
 
     rootNode = root;
 }
@@ -100,7 +100,7 @@ void RivalAI::LookAt(Vector3 targetPos) {
     dir.y = 0;
     dir = Vector::Normalise(dir);
 
-	// set orientation
+    // set orientation
     if (Vector::Length(dir) > 0) {
         Matrix4 lookAt = Matrix::View(Vector3(0, 0, 0), -dir, Vector3(0, 1, 0));
         GetTransform().SetOrientation(Quaternion(Matrix::Inverse(lookAt)));
@@ -196,16 +196,16 @@ BehaviourState RivalAI::FindWinZone(float dt) {
 BehaviourState RivalAI::GetClosestStone(float dt) {
     struct Candidate {
         GameObject* obj;
-        float distSq; // 直线距离的平方（用来快速排序）
+        float distSq; // Square of straight-line distance (for quick sort)
     };
     std::vector<Candidate> candidates;
     Vector3 myPos = GetTransform().GetPosition();
 
-    // 1. 第一步：收集所有可能是石头的物体，计算直线距离
+    // 1. Step 1: Collect all objects that might be stones, calculate straight-line distance
     gameWorld->OperateOnContents([&](GameObject* o) {
         if (!o->IsActive()) return;
 
-        // 包含 "Stone" 的物体
+        // Objects containing "Stone"
         if (o->GetName() == "Stone" && o != GetHeldItem()) {
             Vector3 diff = o->GetTransform().GetPosition() - myPos;
             candidates.push_back({ o, Vector::LengthSquared(diff) });
@@ -214,38 +214,38 @@ BehaviourState RivalAI::GetClosestStone(float dt) {
 
     if (candidates.empty()) return Failure;
 
-    // 2. 第二步：按直线距离排序 (由近到远)
-    // 这一步很快，比 A* 快得多
+    // 2. Step 2: Sort by straight-line distance (near to far)
+    // This step is fast, much faster than A*
     std::sort(candidates.begin(), candidates.end(),
         [](const Candidate& a, const Candidate& b) {
             return a.distSq < b.distSq;
         });
 
-    // 3. 第三步：只对最近的 3 个候选者进行昂贵的寻路计算
-    // 为什么是 3 个？因为有可能直线最近的那个隔了一堵墙，
-    // 而直线第二近的那个就在门口。检查前 3-5 个通常足够覆盖这种情况。
+    // 3. Step 3: Perform expensive pathfinding only for the closest 3 candidates
+    // Why 3? Because the closest straight-line one might be behind a wall,
+    // while the second closest is right at the door. Checking top 3-5 is usually enough.
     GameObject* bestStone = nullptr;
     float minNavDist = 99999.0f;
 
-    int checkCount = std::min((int)candidates.size(), 3); // 只检查前3个
+    int checkCount = std::min((int)candidates.size(), 3); // Check only top 3
 
     for (int i = 0; i < checkCount; ++i) {
         GameObject* obj = candidates[i].obj;
 
-        // 计算实际导航路径长度
+        // Calculate actual navigation path length
         float realPathDist = CalculatePathDistance(myPos, obj->GetTransform().GetPosition());
 
-        // 如果路径有效且更短
+        // If path is valid and shorter
         if (realPathDist < minNavDist) {
             minNavDist = realPathDist;
             bestStone = obj;
         }
     }
 
-    // 4. 设置目标
+    // 4. Set target
     if (bestStone && minNavDist < 90000.0f) {
         currentTarget = bestStone;
-        // Debug: 打印结果
+        // Debug: Print result
         // std::cout << "Selected Stone: " << bestStone->GetName() << " Path Dist: " << minNavDist << std::endl;
         return Success;
     }
@@ -267,7 +267,7 @@ BehaviourState RivalAI::GetClosestCoin(float dt) {
 BehaviourState RivalAI::GetPackageOrCamp(float dt) {
     GameObject* pkg = FindPackage();
     if (pkg && pkg->IsActive()) {
-		currentTarget = pkg; // catch the package
+        currentTarget = pkg; // catch the package
     }
     else {
         currentTarget = nullptr;
@@ -278,7 +278,7 @@ BehaviourState RivalAI::GetPackageOrCamp(float dt) {
 BehaviourState RivalAI::MoveToTarget(float dt) {
     Vector3 targetPos;
     Vector3 myPos = GetTransform().GetPosition();
-    
+
     if (currentTarget) {
         if (!currentTarget->IsActive()) return Failure;
         targetPos = currentTarget->GetTransform().GetPosition();
@@ -287,24 +287,24 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
         }
     }
     else {
-		targetPos = packageSpawnPos; // if no target, go to camp point(start position of package)
+        targetPos = packageSpawnPos; // if no target, go to camp point(start position of package)
     }
 
-    // 目标位置发生了显著变化
+    // Target position changed significantly
     float distToLastTarget = Vector::LengthSquared(targetPos - lastCalcTargetPos);
     bool targetMoved = distToLastTarget > 25.0f;
 
-    // 调用FindPath
+    // Call FindPath
     if (targetMoved) {
         CalculatePath(targetPos);
-        lastCalcTargetPos = targetPos; // 更新“上次记录的位置”
+        lastCalcTargetPos = targetPos; // Update "last recorded position"
     }
-    
-	// if no path, go to the target directly
+
+    // if no path, go to the target directly
     if (pathPoints.empty()) {
         Vector3 dir = (targetPos - myPos);
         dir.y = 0;
-		if (Vector::Length(dir) > 1.0f) { // only care about horizontal distance
+        if (Vector::Length(dir) > 1.0f) { // only care about horizontal distance
             GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 15.0f); // set it slower than player
             LookAt(targetPos);
         }
@@ -312,42 +312,42 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
         float yDiff = targetPos.y - myPos.y;
         dir.y = 0;
         float xzDist = Vector::Length(dir);
-        
+
         if (yDiff >= 1.0f && xzDist <= 1.0f) { // jump conditions
             Jump();
         }
-		return Success; // catch
+        return Success; // catch
     }
 
-	// get next waypoint
+    // get next waypoint
     Vector3 nextWaypoint = pathPoints[0];
     nextWaypoint.y = myPos.y;
     Vector3 dir = nextWaypoint - myPos;
     dir.y = 0;
     float distToNode = Vector::Length(dir);
 
-	// get to the point
+    // get to the point
     if (distToNode < 5.0f) {
-        pathPoints.erase(pathPoints.begin()); 
+        pathPoints.erase(pathPoints.begin());
         return Ongoing;
     }
 
-	// physical move
+    // physical move
     GetPhysicsObject()->AddForce(Vector::Normalise(dir) * 15.0f);
     LookAt(nextWaypoint);
 
     // Draw Debug Lines
     Debug::DrawLine(GetTransform().GetPosition(), nextWaypoint, Vector4(1, 0, 0, 1));
-	// complete path(blue)
+    // complete path(blue)
     for (size_t i = 0; i < pathPoints.size() - 1; ++i) {
         Vector3 a = pathPoints[i];
         Vector3 b = pathPoints[i + 1];
-		// a little up
+        // a little up
         a.y += 1;
         b.y += 1;
         Debug::DrawLine(a, b, Vector4(0, 0, 1, 1));
     }
-	// draw target(green)
+    // draw target(green)
     Debug::DrawLine(targetPos, targetPos + Vector3(0, 10, 0), Vector4(0, 1, 0, 1));
 
     return Ongoing;
@@ -361,12 +361,12 @@ BehaviourState RivalAI::AttemptGrab(float dt) {
     if (dist < 10.0f) {
         LookAt(currentTarget->GetTransform().GetPosition());
 
-		// throw current held item first
+        // throw current held item first
         GameObject* item = GetHeldItem();
-        if(item){
+        if (item) {
             ThrowHeldItem(Vector3(0, 0, 0));
         }
-		// make sure cooldown is ready
+        // make sure cooldown is ready
         if (actionCooldown <= 0.0f) {
             Vector3 aimDir = GetTransform().GetOrientation() * Vector3(0, 0, 1);
             TryGrab(aimDir);
@@ -379,15 +379,15 @@ BehaviourState RivalAI::AttemptGrab(float dt) {
 }
 
 BehaviourState RivalAI::ThrowAtPlayer(float dt) {
-	Player* targetP = FindPlayerHoldingPackage(); // confirm target player
-	// Actually, this action aims to the package that player is holding
+    Player* targetP = FindPlayerHoldingPackage(); // confirm target player
+    // Actually, this action aims to the package that player is holding
     if (!targetP) return Failure;
-	std::cout << "RivalAI: ThrowAtPlayer action executing.\n";
-	Vector3 packagePos = fragilePackage->GetTransform().GetPosition(); // get package position
+    std::cout << "RivalAI: ThrowAtPlayer action executing.\n";
+    Vector3 packagePos = fragilePackage->GetTransform().GetPosition(); // get package position
     Vector3 myPos = GetTransform().GetPosition();
     float dist = Vector::Length(packagePos - myPos);
 
-	// check distance
+    // check distance
     if (dist > 50.0f) {
         Vector3 dir = (packagePos - myPos);
         dir.y = 0;
@@ -396,11 +396,11 @@ BehaviourState RivalAI::ThrowAtPlayer(float dt) {
         return Ongoing;
     }
     std::cout << actionCooldown << std::endl;
-	// Attack when in range
+    // Attack when in range
     LookAt(packagePos);
     if (actionCooldown <= 0.0f) {
         Vector3 aimDir = Vector::Normalise((packagePos - myPos));
-		ThrowHeldItem(aimDir); // parent method
+        ThrowHeldItem(aimDir); // parent method
         actionCooldown = 1.0f;
         return Success;
     }
@@ -412,14 +412,14 @@ void RivalAI::Jump() {
     if (jumpCooldown <= 0.0f && IsOnGround()) {
         GetPhysicsObject()->ApplyLinearImpulse(Vector3(0, 15, 0));
         jumpCooldown = 1.0f;
-		// add forward impulse to avoid getting stuck
+        // add forward impulse to avoid getting stuck
         Vector3 fwd = GetTransform().GetOrientation() * Vector3(0, 0, 1);
         GetPhysicsObject()->ApplyLinearImpulse(fwd * 1.5f);
     }
 }
 
 bool RivalAI::IsOnGround() {
-	// raycast down to check ground
+    // raycast down to check ground
     Vector3 pos = GetTransform().GetPosition();
     Ray ray(pos, Vector3(0, -1.0, 0));
     RayCollision collision;
@@ -434,22 +434,22 @@ float RivalAI::CalculatePathDistance(Vector3 startPos, Vector3 endPos) {
     if (!grid) return 99999.0f;
 
     NavigationPath outPath;
-    // 使用 NCL 的 FindPath
+    // Use NCL's FindPath
     bool found = grid->FindPath(startPos, endPos, outPath);
 
-    // 如果根本走不到（比如石头被封死了），返回无限大
+    // If unreachable (e.g., stone is blocked), return infinity
     if (!found) return 99999.0f;
 
     float totalDist = 0.0f;
     Vector3 currentPos = startPos;
     Vector3 nextPos;
 
-    // 累加路径点之间的距离
+    // Accumulate distance between path points
     while (outPath.PopWaypoint(nextPos)) {
         totalDist += Vector::Length(nextPos - currentPos);
         currentPos = nextPos;
     }
 
-    // 加上最后一点到目标的距离（视具体 Path 实现而定，有时最后一点就是目标）
+    // Add distance from last point to target (depends on Path implementation, sometimes last point is target)
     return totalDist;
 }

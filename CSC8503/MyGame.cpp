@@ -224,7 +224,7 @@ void MyGame::InitWorld() {
 }
 
 void MyGame::InitDefaultPlayer() {
-	Vector3 pos = Vector3(0, 20, 0);
+	Vector3 pos = Vector3(0, 20, 170);
 	Player* p = AddPlayerToWorld(pos, 1.0f);
 
 	players.push_back(p); // add to players list
@@ -261,7 +261,7 @@ GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 
 GameObject* MyGame::AddSphereToWorld(const Vector3& position, float radius, float inverseMass) {
 	GameObject* sphere = new GameObject("Stone"); // changed name to Stone
-	
+
 	Vector3 sphereSize = Vector3(radius, radius, radius);
 	SphereVolume* volume = new SphereVolume(radius);
 	sphere->SetBoundingVolume(volume);
@@ -297,6 +297,7 @@ GameObject* MyGame::AddCubeToWorld(const Vector3& position, Vector3 dimensions, 
 
 	cube->GetPhysicsObject()->SetInverseMass(inverseMass);
 	cube->GetPhysicsObject()->InitCubeInertia();
+	cube->SetInitPosition(position);
 
 	world.AddGameObject(cube);
 
@@ -318,6 +319,7 @@ GameObject* MyGame::AddOBBCubeToWorld(const Vector3& position, Vector3 dimension
 
 	cube->GetPhysicsObject()->SetInverseMass(inverseMass);
 	cube->GetPhysicsObject()->InitCubeInertia();
+	cube->SetInitPosition(position);
 
 	world.AddGameObject(cube);
 
@@ -377,7 +379,7 @@ StateGameObject* MyGame::AddPatrolEnemyToWorld(const Vector3& position, const Ve
 	physicsObj->InitSphereInertia();
 
 	character->SetPhysicsObject(physicsObj);
-
+	character->SetInitPosition(position);
 	// set patrol route
 	std::vector<Vector3> patrolPath;
 	patrolPath.push_back(position);
@@ -398,7 +400,7 @@ Player* MyGame::AddPlayerToWorld(const NCL::Maths::Vector3& position, float radi
 
 	SphereVolume* volume = new SphereVolume(radius * 0.5f); // set bounding volume
 	newplayer->SetBoundingVolume(volume);
-	
+
 	newplayer->GetTransform() // set transform
 		.SetScale(Vector3(radius, radius, radius))
 		.SetPosition(position);
@@ -442,6 +444,7 @@ RivalAI* MyGame::AddRivalAIToWorld(const NCL::Maths::Vector3& position, float ra
 	newRival->SetPhysicsObject(physicsObj);
 
 	newRival->SetWinningScore(winningScore); // set rival winning condition
+	newRival->SetInitPosition(position);
 
 	world.AddGameObject(newRival);
 
@@ -469,6 +472,7 @@ GooseNPC* MyGame::AddGooseNPCToWorld(const Vector3& position, float radius)
 	physicsObj->InitSphereInertia();
 
 	newGoose->SetPhysicsObject(physicsObj);
+	newGoose->SetInitPosition(position);
 
 	world.AddGameObject(newGoose);
 
@@ -517,10 +521,10 @@ void MyGame::SetCameraToPlayer(Player* player) {
 }
 
 void MyGame::PuzzleDoorLogic(float dt) {
-	// 如果没有门或没有板，直接返回
+	// If no door or no plate, return directly
 	if (puzzleDoor.empty() || pressurePlate.empty()) return;
 
-	// 假设门和压力板是一一对应的，取较小的那个数量进行循环
+	// Assume door and pressure plate correspond one-to-one, loop based on the smaller count
 	size_t count = std::min(puzzleDoor.size(), pressurePlate.size());
 
 	for (size_t i = 0; i < count; ++i) {
@@ -531,7 +535,7 @@ void MyGame::PuzzleDoorLogic(float dt) {
 		Vector3 platePos = currentPlate->GetTransform().GetPosition();
 		Vector3 triggerSize = Vector3(5.5f, 2.0f, 5.5f);
 
-		// 定义检测函数（修改为直接使用传入的位置）
+		// Define check function (modified to use passed position directly)
 		auto CheckTrigger = [&](GameObject* obj) {
 			if (!obj) return false;
 			Vector3 pos = obj->GetTransform().GetPosition();
@@ -540,17 +544,17 @@ void MyGame::PuzzleDoorLogic(float dt) {
 				pos.z > platePos.z - triggerSize.z && pos.z < platePos.z + triggerSize.z);
 			};
 
-		// 【修改】检查所有的 cubeStone 是否有任意一个在当前的板子上
+		// [Modified] Check if any cubeStone is on the current plate
 		for (auto* stone : cubeStone) {
 			if (CheckTrigger(stone)) {
 				isTriggered = true;
-				break; // 只要有一个石头在上面就触发
+				break; // Trigger if at least one stone is on it
 			}
 		}
 
-		// 门的移动逻辑
+		// Door movement logic
 		Vector3 doorPos = currentDoor->GetTransform().GetPosition();
-		float targetY = isTriggered ? -8.0f : 6.0f; // 触发时向下，未触发向上
+		float targetY = isTriggered ? -8.0f : 6.0f; // Down when triggered, up when not
 		float doorSpeed = 20.0f;
 
 		if (abs(doorPos.y - targetY) > 0.01f) {
@@ -565,7 +569,7 @@ void MyGame::PuzzleDoorLogic(float dt) {
 			currentDoor->GetTransform().SetPosition(doorPos);
 		}
 
-		// 变色逻辑
+		// Color change logic
 		if (isTriggered) {
 			currentPlate->GetRenderObject()->SetColour(Vector4(0, 1, 0, 1)); // turn green
 		}
@@ -592,6 +596,8 @@ void MyGame::GetCoinLogic(Player* player, float dt) {
 		// collection radius 2.5f, need FragilePackage to collect
 		if (playerHeld) {
 			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
+				Vector3 coinPos = c->GetTransform().GetPosition();
+				packageObject->SetInitPosition(coinPos); // if package is broken, it will reborn here!
 				c->GetTransform().SetPosition(Vector3(0, -999, 0));// set position to -999
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
@@ -605,7 +611,7 @@ void MyGame::PackageLogic(Player* player, float dt) {
 
 	if (player->GetHeldItem() && player->GetHeldItem()->GetName() == "FragilePackage") {
 		score = packageObject->GetCollectionCount(); // reset player score
-		if(packageObject->IsBroken()) {
+		if (packageObject->IsBroken()) {
 			Debug::Print("PACKAGE BROKEN!", Vector2(30, 50), Vector4(1, 0, 0, 1));
 			player->ThrowHeldItem(Vector3(0, 0, 0)); // drop broken package
 			score = 0; // reset player score
@@ -614,7 +620,7 @@ void MyGame::PackageLogic(Player* player, float dt) {
 	packageObject->Update(dt);
 }
 
-void MyGame::WinLoseLogic(Player* player){
+void MyGame::WinLoseLogic(Player* player) {
 	// Win Condition
 	if (!isGameWon && winZone) {
 		Vector3 zonePos = winZone->GetTransform().GetPosition();
@@ -656,7 +662,7 @@ void MyGame::WinLoseLogic(Player* player){
 	}
 }
 
-void MyGame::RivalLogic(){
+void MyGame::RivalLogic() {
 	// rival has the same logic as player
 	if (!rival || !packageObject) return;
 	// About coin collection
@@ -666,9 +672,11 @@ void MyGame::RivalLogic(){
 		if (!c->IsActive()) continue;
 		float rival_dist = Vector::Length((rival->GetTransform().GetPosition() - c->GetTransform().GetPosition()));
 		GameObject* rivalHeld = rival->GetHeldItem();
-		
+
 		if (rivalHeld) {
 			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
+				Vector3 coinPos = c->GetTransform().GetPosition();
+				packageObject->SetInitPosition(coinPos); // if package is broken, it will reborn here!
 				c->GetTransform().SetPosition(Vector3(0, -999, 0)); // remove coin from world
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
@@ -698,12 +706,12 @@ void MyGame::FormatTime(float time, std::string& outStr) {
 }
 
 void MyGame::DrawHighScoreHUD() {
-	// 【关键修改】根据当前模式获取对应的榜单
+	// [Critical Change] Get corresponding list based on current mode
 	auto& scores = HighScoreManager::Instance().GetScores(isNetworkGame);
 
 	float startY = 30.0f;
 	std::string title = isNetworkGame ? "--- NETWORK BEST ---" : "--- SINGLE BEST ---";
-	Vector4 color = isNetworkGame ? Vector4(0, 1, 1, 1) : Vector4(1, 0.8f, 0, 1); // 网络蓝，单机黄
+	Vector4 color = isNetworkGame ? Vector4(0, 1, 1, 1) : Vector4(1, 0.8f, 0, 1); // Network Blue, Single Player Yellow
 
 	Debug::Print(title, Vector2(40, startY), color);
 
@@ -733,7 +741,7 @@ void MyGame::InitCourierLevel() {
 	patrolEnemy.push_back(enemy2);
 
 	// Add packageObject
-	packageObject = new FragileGameObject("FragilePackage", Vector3(20, 3, 160), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1));
+	packageObject = new Package("FragilePackage", Vector3(20, 3, 160), bonusMesh, glassMaterial, Vector4(0, 0, 1, 1));
 	world.AddGameObject(packageObject);
 	rival->SetFragilePackage(packageObject);
 
@@ -832,21 +840,21 @@ void MyGame::InitHedgeMaze() {
 	x.....x.......x....x.........x
 	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 	*/
-	// 迷宫的基本参数
-	Vector3 startPos = Vector3(0, 6, 0); // 迷宫在世界中的起始位置（放在远处避免重叠）
-	float cubeSize = 5.0f; // 墙壁方块的一半尺寸 (实际宽是 10)
+	// Maze basic parameters
+	Vector3 startPos = Vector3(0, 6, 0); // Maze start position in world (placed far away to avoid overlap)
+	float cubeSize = 5.0f; // Wall cube half size (actual width is 10)
 	Vector3 wallDim = Vector3(cubeSize, cubeSize * 1.2f, cubeSize);
 
 	for (int z = 0; z < height; ++z) {
 		for (int x = 0; x < width; ++x) {
 			if (mazeLayout[z][x] == 1) {
-				// 计算每个墙块的位置
+				// Calculate position for each wall block
 				Vector3 pos = startPos + Vector3(x * (cubeSize * 2), 0, z * (cubeSize * 2));
 
-				// 质量设为 0.0f 以使其静止
+				// Set mass to 0.0f to make it static
 				GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
 
-				// 设置颜色为深绿色，看起来像树篱
+				// Set color to dark green to look like a hedge
 				if (x >= 6 && x <= 23) {
 					if (hedge->GetRenderObject()) {
 						hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));

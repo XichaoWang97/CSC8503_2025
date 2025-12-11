@@ -1,17 +1,18 @@
 #pragma once
+#pragma once
 #include "GameObject.h"
 #include "RenderObject.h"
 
 namespace NCL {
     namespace CSC8503 {
-        class FragileGameObject : public GameObject {
+        class Package : public GameObject {
         public:
-            FragileGameObject(const std::string& name, const Vector3& position,
+            Package(const std::string& name, const Vector3& position,
                 Rendering::Mesh* mesh, GameTechMaterial material, Vector4 colour);
 
-            ~FragileGameObject();
+            ~Package();
 
-			// collision event
+            // collision event
             virtual void OnCollisionBegin(GameObject* otherObject) override;
 
             void SetBroken(bool state) { isBroken = state; }
@@ -22,10 +23,10 @@ namespace NCL {
             void Reset();
             virtual void Update(float dt) override;
 
-			void SetAttached(bool attached) { isAttached = attached; }
+            void SetAttached(bool attached) { isAttached = attached; }
             bool GetAttached() const { return isAttached; }
-			int GetCollectionCount() const { return collectionCount; }
-			void IncreaseCollectionCount() { collectionCount++; }
+            int GetCollectionCount() const { return collectionCount; }
+            void IncreaseCollectionCount() { collectionCount++; }
 
             // Package can be held by many players, so use int, not bool here
             // and we always set the count by 1 or -1
@@ -36,9 +37,9 @@ namespace NCL {
             float health;
             float maxHealth;
             bool isBroken;
-			bool isAttached;
+            bool isAttached;
             float timer = 0.0f;
-			int collectionCount;
+            int collectionCount;
             int HeldByPlayer = 0;
         };
     }

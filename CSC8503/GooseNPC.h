@@ -1,10 +1,10 @@
 #pragma once
-#include "StateGameObject.h" // 保持继承 StateGameObject 以兼容 MyGame 中的指针，但我们不使用它的状态机
-#include "NavigationGrid.h"
+#include "StateGameObject.h"
 #include "BehaviourNode.h"
 #include "BehaviourSelector.h"
 #include "BehaviourSequence.h"
 #include "BehaviourAction.h"
+#include "NavigationGrid.h"
 #include "Player.h"
 
 namespace NCL::CSC8503 {
@@ -16,14 +16,14 @@ namespace NCL::CSC8503 {
         void Update(float dt) override;
 
     protected:
-		// Behaviour Tree
+        // Behaviour Tree
         void BuildBehaviourTree();
 
         BehaviourState ChasePlayer(float dt);
 
-        // 辅助函数
+        // Helper functions
         void CalculatePathTo(Vector3 targetPos);
-        void LookAt(Vector3 targetPos, float dt); // 加入 dt 以实现平滑转向
+        void LookAt(Vector3 targetPos, float dt); // Add dt to achieve smooth rotation
 
         NavigationGrid* grid;
 
@@ -32,7 +32,7 @@ namespace NCL::CSC8503 {
         NavigationPath  currentPath;
         std::vector<Vector3> pathPoints;
 
-        Vector3 lastCalcTargetPos; // 记录上次寻路的目标位置
+        Vector3 lastCalcTargetPos; // Record the target position of the last pathfinding
         float timeSinceLastPathCalc = 0.0f;
         float chaseSpeed;
     };

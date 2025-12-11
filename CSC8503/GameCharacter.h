@@ -2,7 +2,7 @@
 #include "GameObject.h"
 #include "GameWorld.h"
 #include "PositionConstraint.h"
-#include "FragileGameObject.h"
+#include "Package.h"
 #include "PhysicsSystem.h"
 #include "PhysicsObject.h"
 #include "Ray.h"
@@ -24,7 +24,7 @@ namespace NCL::CSC8503 {
         }
 
 		// set fragile package
-        void SetFragilePackage(FragileGameObject* package) {
+        void SetFragilePackage(Package* package) {
             fragilePackage = package;
 		}
 
@@ -126,7 +126,7 @@ namespace NCL::CSC8503 {
         GameWorld* gameWorld;
         GameObject* heldItem;
         PositionConstraint* grabConstraint;
-		FragileGameObject* fragilePackage;
+        Package* fragilePackage;
 		float actionCooldown = 0.0f; // cooldown time between actions
     };
 }

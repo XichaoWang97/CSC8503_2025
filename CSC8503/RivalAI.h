@@ -22,7 +22,7 @@ namespace NCL::CSC8503 {
         void SetPlayerList(std::vector<Player*>* players) { allPlayers = players; }
         void SetPackageSpawn(Vector3 pos) { packageSpawnPos = pos; }
 
-		// AI add/get score
+        // AI add/get score
         void SetScore(int amount) { currentScore = amount; }
         int  GetScore() const { return currentScore; }
         void SetWinningScore(int amount) { rivalWinningScore = amount; }
@@ -34,44 +34,44 @@ namespace NCL::CSC8503 {
         GameObject* FindPackage();
 
         void CalculatePath(Vector3 targetPos);
-		void LookAt(Vector3 targetPos); // look at target position
+        void LookAt(Vector3 targetPos); // look at target position
         void Jump();
         float CalculatePathDistance(Vector3 startPos, Vector3 endPos);
 
-		// Behaviour Nodes:
-        BehaviourState HasHighScore(float dt);      // 条件：分数够了吗？
-        BehaviourState IsHoldingPackage(float dt);  // 条件：我拿着包裹吗？
-        BehaviourState IsHoldingStone(float dt);    // 条件：我拿着石头吗？
-        BehaviourState DoesPlayerHavePackage(float dt); // 条件：玩家拿着包裹吗？
+        // Behaviour Nodes:
+        BehaviourState HasHighScore(float dt);      // Condition: Is score enough?
+        BehaviourState IsHoldingPackage(float dt);  // Condition: Am I holding the package?
+        BehaviourState IsHoldingStone(float dt);    // Condition: Am I holding a stone?
+        BehaviourState DoesPlayerHavePackage(float dt); // Condition: Is player holding the package?
 
-        BehaviourState FindWinZone(float dt);       // 动作：去终点
-        BehaviourState GetClosestStone(float dt);   // 动作：找石头并设定目标
-        BehaviourState GetClosestCoin(float dt);    // 动作：找金币并设定目标
-        BehaviourState GetPackageOrCamp(float dt);  // 动作：找包裹或蹲点
+        BehaviourState FindWinZone(float dt);       // Action: Go to extraction zone
+        BehaviourState GetClosestStone(float dt);   // Action: Find stone and set target
+        BehaviourState GetClosestCoin(float dt);    // Action: Find coin and set target
+        BehaviourState GetPackageOrCamp(float dt);  // Action: Find package or camp
 
-        BehaviourState MoveToTarget(float dt);      // 通用动作：移动到 currentTarget
-        BehaviourState AttemptGrab(float dt);       // 通用动作：尝试抓取 currentTarget
-        BehaviourState ThrowAtPlayer(float dt);     // 通用动作：向玩家扔石头
-		Player* FindPlayerHoldingPackage();         // find player who holds package
-        
+        BehaviourState MoveToTarget(float dt);      // Generic Action: Move to currentTarget
+        BehaviourState AttemptGrab(float dt);       // Generic Action: Attempt to grab currentTarget
+        BehaviourState ThrowAtPlayer(float dt);     // Generic Action: Throw stone at player
+        Player* FindPlayerHoldingPackage();         // find player who holds package
 
-        GameObject* exitPoint; // 【新增】存储撤离点坐标
+
+        GameObject* exitPoint; // Store extraction point coordinates
         GameWorld* gameWorld;
         NavigationGrid* grid;
         std::vector<Player*>* allPlayers;
-		GameObject* currentTarget;  // objective target
+        GameObject* currentTarget;  // objective target
 
-		Vector3 packageSpawnPos;    // package camp position(pakcage rebirth point)
-		BehaviourNode* rootNode;
+        Vector3 packageSpawnPos;    // package camp position(pakcage rebirth point)
+        BehaviourNode* rootNode;
         NavigationPath currentPath;
         std::vector<Vector3> pathPoints;
-        Vector3 lastCalcTargetPos; // 记录上一次寻路时的目标位置
+        Vector3 lastCalcTargetPos; // Record the target position from the last path calculation
 
         int currentScore;
         int rivalWinningScore;
         float moveSpeed;
 
-		bool IsOnGround();
+        bool IsOnGround();
         float jumpCooldown = 0.0f;
         float timeSinceLastPathCalc;
     };

@@ -59,3 +59,19 @@ void GameObject::UpdateBroadphaseAABB()
 		}
 	}
 }
+
+void GameObject::ResetAfterFall() {
+	// check y position
+	if (this->GetTransform().GetPosition().y <= -100.0f && this->GetPhysicsObject()->GetInverseMass() != 0.0f) {
+
+		// reset position
+		this->GetTransform().SetPosition(this->GetInitPosition());
+
+		// reset physics
+		if (this->GetPhysicsObject()) {
+			this->GetPhysicsObject()->ClearForces();
+			this->GetPhysicsObject()->SetLinearVelocity(Vector3(0, 0, 0));
+			this->GetPhysicsObject()->SetAngularVelocity(Vector3(0, 0, 0));
+		}
+	}
+}
