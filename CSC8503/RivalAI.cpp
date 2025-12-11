@@ -194,62 +194,12 @@ BehaviourState RivalAI::FindWinZone(float dt) {
 
 // find closest stone
 BehaviourState RivalAI::GetClosestStone(float dt) {
-    struct Candidate {
-        GameObject* obj;
-        float distSq; // Square of straight-line distance (for quick sort)
-    };
-    std::vector<Candidate> candidates;
-    Vector3 myPos = GetTransform().GetPosition();
+    GameObject* bestStone = FindBestStoneWithNav(GetTransform().GetPosition());
 
-    // 1. Step 1: Collect all objects that might be stones, calculate straight-line distance
-    gameWorld->OperateOnContents([&](GameObject* o) {
-        if (!o->IsActive()) return;
-
-        // Objects containing "Stone"
-        if (o->GetName() == "Stone" && o != GetHeldItem()) {
-            Vector3 diff = o->GetTransform().GetPosition() - myPos;
-            candidates.push_back({ o, Vector::LengthSquared(diff) });
-        }
-        });
-
-    if (candidates.empty()) return Failure;
-
-    // 2. Step 2: Sort by straight-line distance (near to far)
-    // This step is fast, much faster than A*
-    std::sort(candidates.begin(), candidates.end(),
-        [](const Candidate& a, const Candidate& b) {
-            return a.distSq < b.distSq;
-        });
-
-    // 3. Step 3: Perform expensive pathfinding only for the closest 3 candidates
-    // Why 3? Because the closest straight-line one might be behind a wall,
-    // while the second closest is right at the door. Checking top 3-5 is usually enough.
-    GameObject* bestStone = nullptr;
-    float minNavDist = 99999.0f;
-
-    int checkCount = std::min((int)candidates.size(), 3); // Check only top 3
-
-    for (int i = 0; i < checkCount; ++i) {
-        GameObject* obj = candidates[i].obj;
-
-        // Calculate actual navigation path length
-        float realPathDist = CalculatePathDistance(myPos, obj->GetTransform().GetPosition());
-
-        // If path is valid and shorter
-        if (realPathDist < minNavDist) {
-            minNavDist = realPathDist;
-            bestStone = obj;
-        }
-    }
-
-    // 4. Set target
-    if (bestStone && minNavDist < 90000.0f) {
+    if (bestStone) {
         currentTarget = bestStone;
-        // Debug: Print result
-        // std::cout << "Selected Stone: " << bestStone->GetName() << " Path Dist: " << minNavDist << std::endl;
         return Success;
     }
-
     return Failure;
 }
 
@@ -288,6 +238,29 @@ BehaviourState RivalAI::MoveToTarget(float dt) {
     }
     else {
         targetPos = packageSpawnPos; // if no target, go to camp point(start position of package)
+    }
+
+    // Retargeting logic: Periodically check for a better target
+    // Only check when searching for stones
+    if (currentTarget && (currentTarget->GetName() == "Stone")) {
+        retargetTimer -= dt;
+        if (retargetTimer <= 0.0f) {
+            retargetTimer = 1.0f; // Reset timer
+
+            GameObject* bestNewStone = FindBestStoneWithNav(myPos);
+
+            if (bestNewStone && bestNewStone != currentTarget) {
+                // Recalculate both path distances for comparison
+                float newDist = CalculatePathDistance(myPos, bestNewStone->GetTransform().GetPosition());
+                float oldDist = CalculatePathDistance(myPos, currentTarget->GetTransform().GetPosition());
+
+                // Threshold check
+                if (newDist < oldDist - 5.0f) {
+                    currentTarget = bestNewStone;
+                    CalculatePath(currentTarget->GetTransform().GetPosition());
+                }
+            }
+        }
     }
 
     // Target position changed significantly
@@ -452,4 +425,47 @@ float RivalAI::CalculatePathDistance(Vector3 startPos, Vector3 endPos) {
 
     // Add distance from last point to target (depends on Path implementation, sometimes last point is target)
     return totalDist;
+}
+
+GameObject* RivalAI::FindBestStoneWithNav(Vector3 searchPos) {
+    struct Candidate {
+        GameObject* obj;
+        float distSq;
+    };
+    std::vector<Candidate> candidates;
+
+    // collect stones
+    gameWorld->OperateOnContents([&](GameObject* o) {
+        if (o->IsActive() && o->GetName() == "Stone" && o != GetHeldItem()) {
+            Vector3 diff = o->GetTransform().GetPosition() - searchPos;
+            candidates.push_back({ o, Vector::LengthSquared(diff) });
+        }
+        });
+
+    if (candidates.empty()) return nullptr;
+
+    // Sort by straight-line distance
+    std::sort(candidates.begin(), candidates.end(),
+        [](const Candidate& a, const Candidate& b) {
+            return a.distSq < b.distSq;
+        });
+
+    // Check the top 3 candidates and find the one with the shortest navigation distance
+    GameObject* bestStone = nullptr;
+    float minNavDist = 99999.0f;
+    int checkCount = std::min((int)candidates.size(), 3);
+
+    for (int i = 0; i < checkCount; ++i) {
+        float pathDist = CalculatePathDistance(searchPos, candidates[i].obj->GetTransform().GetPosition());
+        if (pathDist < minNavDist) {
+            minNavDist = pathDist;
+            bestStone = candidates[i].obj;
+        }
+    }
+
+    // Only return if the path is valid
+    if (minNavDist < 90000.0f) {
+        return bestStone;
+    }
+    return nullptr;
 }

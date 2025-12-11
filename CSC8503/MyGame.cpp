@@ -617,6 +617,9 @@ void MyGame::PackageLogic(Player* player, float dt) {
 			score = 0; // reset player score
 		}
 	}
+	else {
+		score = 0; // as long as the held item is not the package or is empty, reset the displayed score to zero.
+	}
 	packageObject->Update(dt);
 }
 

@@ -74,5 +74,8 @@ namespace NCL::CSC8503 {
         bool IsOnGround();
         float jumpCooldown = 0.0f;
         float timeSinceLastPathCalc;
+
+        float retargetTimer = 0.0f; // regret machanism, help rival find closest object better
+        GameObject* FindBestStoneWithNav(Vector3 searchPos);
     };
 }
