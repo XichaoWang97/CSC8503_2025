@@ -221,11 +221,6 @@ namespace NCL {
 				return PushdownResult::NoChange;
 			}
 
-			void OnAwake() override {
-				Window::GetWindow()->ShowOSPointer(false);
-				Window::GetWindow()->LockMouseToWindow(true);
-			}
-
 		protected:
 			MyGame* game;
 			GameWorld* world;
@@ -270,11 +265,6 @@ namespace NCL {
 					return PushdownResult::Pop;
 				}
 				return PushdownResult::NoChange;
-			}
-
-			void OnAwake() override {
-				Window::GetWindow()->ShowOSPointer(false);
-				Window::GetWindow()->LockMouseToWindow(true);
 			}
 
 		protected:
@@ -390,11 +380,6 @@ namespace NCL {
 				}
 
 				return PushdownResult::NoChange;
-			}
-
-			void OnAwake() override {
-				Window::GetWindow()->ShowOSPointer(true);
-				Window::GetWindow()->LockMouseToWindow(false);
 			}
 
 		protected:
