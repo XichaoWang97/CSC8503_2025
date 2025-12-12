@@ -1,4 +1,4 @@
-#include "Player.h"
+﻿#include "Player.h"
 #include "GameWorld.h"
 #include "PhysicsSystem.h"
 #include "PhysicsObject.h"
@@ -6,6 +6,9 @@ using namespace NCL;
 using namespace CSC8503;
 
 Player::Player(GameWorld* world) : GameCharacter("Player", world) {
+    jumpBufferTime = 0.0f;
+    jumpCooldown = 0.0f;
+    wasOnGround = false;
 }
 
 Player::~Player() {
@@ -17,6 +20,14 @@ void Player::Update(float dt) {
     if (actionCooldown > 0.0f) {
         actionCooldown -= dt;
     }
+
+    if (jumpBufferTime > 0.0f) {
+        jumpBufferTime -= dt;
+    }
+    if (jumpCooldown > 0.0f) {
+        jumpCooldown -= dt;
+    }
+
     // read from local if it is not networked game mode
     if (!ignoreInput) {
         currentInputs.isMoving = false;
@@ -47,9 +58,17 @@ void Player::Update(float dt) {
     DrawGrappleLine();
 }
 
+void Player::SetPlayerInput(const PlayerInputs& inputs) {
+    currentInputs = inputs;
+    // Only accept jump input when not on cooldown
+    if (inputs.jump && jumpCooldown <= 0.0f) {
+        jumpBufferTime = JUMP_BUFFER_DURATION;
+    }
+}
+
 // Player control function, modern Engine style
 void Player::PlayerControl(float dt) {
-	PhysicsObject* phys = GetPhysicsObject(); // Get self PhysicsObject
+    PhysicsObject* phys = GetPhysicsObject(); // Get self PhysicsObject
     if (!phys) return;
 
     Transform& transform = GetTransform(); // Get self Transform
@@ -58,10 +77,10 @@ void Player::PlayerControl(float dt) {
     float maxSpeed = 15.0f;
     float rotationSpeed = 10.0f;
 
-	// get camera yaw
+    // get camera yaw
     Quaternion cameraRot = Quaternion::EulerAnglesToQuaternion(0, currentInputs.cameraYaw, 0);
 
-	// build input direction
+    // build input direction
     Vector3 inputDir(0, 0, 0);
     if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) inputDir.z -= 1;
     if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) inputDir.z += 1;
@@ -95,16 +114,16 @@ void Player::PlayerControl(float dt) {
         Vector3 playerDir = GetTransform().GetOrientation() * Vector3(0, 0, 1);
 
         if (GetHeldItem()) {
-			ThrowHeldItem(playerDir); // there is something, so throw
+            ThrowHeldItem(playerDir); // there is something, so throw
             actionCooldown = 0.5f;
         }
         else {
-			TryGrab(playerDir);       // nothing held, try grab
+            TryGrab(playerDir);       // nothing held, try grab
             actionCooldown = 0.5f;
         }
     }
 
-	// velocity limiting
+    // velocity limiting
     Vector3 velocity = phys->GetLinearVelocity();
     Vector3 planarVelocity(velocity.x, 0, velocity.z);
 
@@ -113,7 +132,7 @@ void Player::PlayerControl(float dt) {
         phys->SetLinearVelocity(Vector3(planarVelocity.x, velocity.y, planarVelocity.z));
     }
 
-	// Damping when not moving
+    // Damping when not moving
     if (!currentInputs.isMoving) {
         if (Vector::Length(planarVelocity) > 0.1f) {
             float dampingFactor = 5.0f;
@@ -121,21 +140,36 @@ void Player::PlayerControl(float dt) {
         }
     }
 
-    // jump
-    if (currentInputs.jump) {
-        if (IsPlayerOnGround()) {
-            phys->ApplyLinearImpulse(Vector3(0, 15, 0));
-            currentInputs.jump = false;
-        }
+    // Jump (Prevent double jumping)
+    // Check jump input, set buffer
+    if (currentInputs.jump && jumpCooldown <= 0.0f) {
+        jumpBufferTime = JUMP_BUFFER_DURATION;
+        currentInputs.jump = false; // Clear input flag
+    }
+    
+    bool onGround = IsPlayerOnGround(); // Check if currently on ground
+    
+    if (onGround && !wasOnGround) { // Reset jump ability when landing (moment of landing from air)
+    }
+    wasOnGround = onGround;
+
+    // Execute jump (triple check)
+    if (jumpBufferTime > 0.0f &&    // Has jump input buffer
+        onGround &&                  // Is on ground
+        jumpCooldown <= 0.0f) {      // Cooldown finished
+
+        phys->ApplyLinearImpulse(Vector3(0, 20, 0)); // Apply jump impulse
+
+        jumpBufferTime = 0.0f; // Clear state
+        jumpCooldown = JUMP_COOLDOWN_DURATION; // Start cooldown
     }
 }
 
 // Test if player is on ground
 bool Player::IsPlayerOnGround() {
-
     Vector3 playerPos = GetTransform().GetPosition();
 
-	// emit a ray downwards
+    // emit a ray downwards
     Ray ray(playerPos, Vector3(0, -1, 0));
     RayCollision collision;
 
@@ -143,7 +177,9 @@ bool Player::IsPlayerOnGround() {
 
     if (gameWorld->Raycast(ray, collision, true, this)) {
         if (collision.rayDistance < groundCheckDist) {
-            return true;
+            // Check vertical velocity, only count as grounded if velocity is near zero or downwards
+            Vector3 velocity = GetPhysicsObject()->GetLinearVelocity();
+            return velocity.y <= 0.1f;
         }
     }
 

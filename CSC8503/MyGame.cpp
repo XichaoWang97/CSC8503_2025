@@ -797,11 +797,11 @@ void MyGame::InitCourierLevel() {
 	InitHedgeMaze();
 }
 
-// Generate a maze
+// Generate a maze with Greedy Meshing!
 void MyGame::InitHedgeMaze() {
-	// 1 = wall, 0 = road, 18 * 18 size
 	const int width = 30;
 	const int height = 18;
+	// Original map data
 	int mazeLayout[height][width] = {
 		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
 		{1, 0, 0, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
@@ -821,47 +821,83 @@ void MyGame::InitHedgeMaze() {
 		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
 		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 		{1, 1, 1, 1, 1, 1 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-
 	};
-	/*
-	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-	x..................x...x.....x
-	x.....xxxxxxxxxxxx.x.x.x.....x
-	x.....x.x......x...x.x.x.....x
-	x.....x.x.xxxx...xxxxx.x.....x
-	x.....x.x....xxxxx.....x.....x
-	x.....x.xxxx.x.x.x.x.x.x.....x
-	x.....x....x.x.......xxx.....x
-	x.xxx.x.x.xx.x.xxxxx.x.x.xxx.x
-	x.xxx.x.x....x..x..x.x.x.xxx.x
-	x.....x.xxxxxxx.x..x.x.x.....x
-	x.....x...x.....xx.x...x.....x
-	x.....xxx.xxx.x.x....xxx.....x
-	x.....x.x...x.x.xx.xxx.x.....x
-	x.....x.xxx.x.x..x.....x.....x
-	x.....x.x...x.xx.xxx.xxx.....x
-	x.....x.......x....x.........x
-	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-	*/
-	// Maze basic parameters
-	Vector3 startPos = Vector3(0, 6, 0); // Maze start position in world (placed far away to avoid overlap)
-	float cubeSize = 5.0f; // Wall cube half size (actual width is 10)
-	Vector3 wallDim = Vector3(cubeSize, cubeSize * 1.2f, cubeSize);
+
+	// Helper array: Mark which cells have been processed
+	// true means processed, false means not processed
+	bool processed[height][width] = { false };
+
+	Vector3 startPos = Vector3(0, 6, 0);
+	float cubeSize = 5.0f;           // Radius
+	float nodeSize = cubeSize * 2.0f; // Diameter
 
 	for (int z = 0; z < height; ++z) {
 		for (int x = 0; x < width; ++x) {
-			if (mazeLayout[z][x] == 1) {
-				// Calculate position for each wall block
-				Vector3 pos = startPos + Vector3(x * (cubeSize * 2), 0, z * (cubeSize * 2));
 
-				// Set mass to 0.0f to make it static
-				GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
+			// If this point is not a wall, or is a wall but already processed, skip it
+			if (mazeLayout[z][x] == 0 || processed[z][x]) {
+				continue;
+			}
 
-				// Set color to dark green to look like a hedge
-				if (x >= 6 && x <= 23) {
-					if (hedge->GetRenderObject()) {
-						hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
+			// Determine current rectangle width (extend right)
+			int currentWidth = 0;
+			// Search right from current x until hitting non-wall, boundary, or processed cell
+			while ((x + currentWidth < width) &&
+				mazeLayout[z][x + currentWidth] == 1 &&
+				!processed[z][x + currentWidth]) {
+				currentWidth++;
+			}
+
+			// Determine current rectangle height (extend down)
+			int currentHeight = 1; // At least the current row
+			while (z + currentHeight < height) {
+				// Check every cell in the next row for the corresponding width, must be all walls and unprocessed
+				bool canExtend = true;
+				for (int k = 0; k < currentWidth; ++k) {
+					if (mazeLayout[z + currentHeight][x + k] == 0 ||
+						processed[z + currentHeight][x + k]) {
+						canExtend = false;
+						break;
 					}
+				}
+				if (canExtend) {
+					currentHeight++;
+				}
+				else {
+					break; // Next row doesn't meet conditions, stop extending
+				}
+			}
+
+			// Mark these cells as processed
+			for (int h = 0; h < currentHeight; ++h) {
+				for (int w = 0; w < currentWidth; ++w) {
+					processed[z + h][x + w] = true;
+				}
+			}
+
+			// Generate this merged large rectangle
+			float centerX = startPos.x + (x * nodeSize) + (currentWidth * nodeSize * 0.5f) - cubeSize;
+			float centerZ = startPos.z + (z * nodeSize) + (currentHeight * nodeSize * 0.5f) - cubeSize;
+
+			Vector3 pos = Vector3(centerX, startPos.y, centerZ);
+
+			// Define a tiny shrink distance (Gap). A 0.05f shrink means there will be a 0.1f gap between two walls.
+            // The gap is visually almost invisible, but it is a huge safety distance for the physics engine.
+			float shrinkPadding = 0.05f;
+
+			// Half size of the physics bounding box
+			Vector3 wallDim = Vector3(
+				currentWidth * cubeSize - shrinkPadding,
+				cubeSize * 1.2f - shrinkPadding, // Height remains unchanged
+				currentHeight * cubeSize - shrinkPadding
+			);
+
+			GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
+
+			// set colour to green
+			if (x >= 6 && x <= 23) {
+				if (hedge->GetRenderObject()) {
+					hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
 				}
 			}
 		}

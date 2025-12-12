@@ -1,4 +1,4 @@
-#include "NetworkedGame.h"
+﻿#include "NetworkedGame.h"
 #include "NetworkPlayer.h"
 #include "NetworkObject.h"
 #include "GameServer.h"
@@ -27,6 +27,7 @@ struct GlobalStatePacket : public GamePacket {
 	// package states
 	float packageHealth;
 	bool  packageBroken;
+	float packageTimer;
 
 	int p1HeldItemID;
 	int p2HeldItemID;
@@ -40,6 +41,7 @@ struct GlobalStatePacket : public GamePacket {
 		gameOverReason = 0;
 		packageHealth = 100.0f;
 		packageBroken = false;
+		packageTimer = 0.0f;
 		p1HeldItemID = -1; // -1 means nothing held
 		p2HeldItemID = -1;
 	}
@@ -82,7 +84,7 @@ NetworkedGame::~NetworkedGame() {
 }
 
 void NetworkedGame::StartAsServer(int playerCount) {
-	// 1. [New] Force reset local network state flags
+	// Force reset local network state flags
 	ui_p1Dead = false;
 	ui_p2Dead = false;
 	ui_p2Connected = false;
@@ -129,7 +131,7 @@ void NetworkedGame::StartAsServer(int playerCount) {
 }
 
 void NetworkedGame::StartAsClient(char a, char b, char c, char d) {
-	// 1. [New] Force reset local network state flags
+	// Force reset local network state flags
 	ui_p1Dead = false;
 	ui_p2Dead = false;
 	ui_p2Connected = false;
@@ -203,7 +205,7 @@ void NetworkedGame::UpdateGame(float dt) {
 		timeToNextPacket += 1.0f / 60.0f; // improve to 60Hz
 	}
 
-	// 3. Network update
+	// Network update
 	if (thisServer) thisServer->UpdateServer();
 	if (thisClient) thisClient->UpdateClient();
 	DrawNetworkHUD();
@@ -264,7 +266,7 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	// Just take the results calculated by MyGame to send packets
 	GlobalStatePacket statePacket;
 	statePacket.useGravity = useGravity;
-	// [New] Get the NetworkID of the item held by the player
+	// Get the NetworkID of the item held by the player
 	statePacket.p1HeldItemID = -1;
 	statePacket.p2HeldItemID = -1;
 	// Check Player 1 (Host)
@@ -388,19 +390,19 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		case BasicNetworkMessages::Full_State:
 		case BasicNetworkMessages::Delta_State: {
 			int objectID = -1;
-			// 1. Parse object ID from network packet
+			// Parse object ID from network packet
 			if (type == Full_State) objectID = ((FullPacket*)payload)->objectID;
 			else objectID = ((DeltaPacket*)payload)->objectID;
 
-			// 2. Iterate through all objects in the local game world
+			// Iterate through all objects in the local game world
 			std::vector<GameObject*>::const_iterator first;
 			std::vector<GameObject*>::const_iterator last;
 			world.GetObjectIterators(first, last);
 			for (auto i = first; i != last; ++i) {
 				NetworkObject* o = (*i)->GetNetworkObject();
-				// 3. Find object matching NetworkID
+				// Find object matching NetworkID
 				if (o && o->GetNetworkID() == objectID) {
-					// 4. [Critical Step] Call ReadPacket to read position and rotation data and apply to the object ------------------------
+					// Call ReadPacket to read position and rotation data and apply to the object
 					o->ReadPacket(*payload);
 					break;
 				}
@@ -419,19 +421,17 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 		if (rival) rival->SetScore(packet->rivalScore);
 		this->score = packet->playerScore;
-		// [New] Client handles package logic
+		// Client handles package logic
 		if (packageObject) {
-			// 1. Sync health (for correct UI display)
-			// Assuming your Package has SetHealth, otherwise add one
-			// Or manipulate public variables directly, assuming you can set it somehow
+			// Sync health (for correct UI display)
 			packageObject->SetHealth(packet->packageHealth);
 
-			// 2. Handle fragmentation logic
+			// Handle fragmentation logic
 			if (packet->packageBroken) {
 				// Set local object state
 				packageObject->SetBroken(true); // If this function doesn't exist, need to add it to Package
 
-				// [Critical Step] Force the holder to let go!
+				// Force the holder to let go!
 				// If not released, the client will keep trying to pull the package back, causing visual glitches
 				for (Player* p : players) {
 					if (p->GetHeldItem() == packageObject) {
@@ -440,7 +440,7 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 				}
 			}
 		}
-		// [New] Sync visual effect of grapple line
+		// Sync visual effect of grapple line
 		if (thisClient) { // Only client needs to sync this, server already knows
 
 			// Define a lambda function to find object by ID
@@ -490,7 +490,7 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			}
 		}
 
-		// [New] Sync player death state and connection state
+		// Sync player death state and connection state
 		// Save for UI rendering
 		ui_p1Dead = packet->p1Dead;
 		ui_p2Dead = packet->p2Dead;
@@ -538,7 +538,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	int forward = 0;
 	int right = 0;
 
-	// 1. Collect input for packet sending (This part remains unchanged, sent to server for movement)
+	// Collect input for packet sending (This part remains unchanged, sent to server for movement)
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::W)) forward -= 100;
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::S)) forward += 100;
 	if (Window::GetKeyboard()->KeyDown(KeyCodes::A)) right -= 100;
@@ -551,15 +551,29 @@ void NetworkedGame::UpdateAsClient(float dt) {
 	newPacket.buttonstates[0] = 0;
 	newPacket.buttonstates[1] = 0;
 
-	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) newPacket.buttonstates[0] = 1;
+	// Jump input: Trigger on KeyPressed + keep sending for a duration
+	static float jumpSendTimer = 0.0f;
+	// Start send timer when Space is pressed
+	if (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE)) {
+		jumpSendTimer = 0.2f; // Send for 200ms (approx 12 frames @ 60Hz)
+	}
+	// If player releases key, stop sending immediately
+	if (!Window::GetKeyboard()->KeyDown(KeyCodes::SPACE)) {
+		jumpSendTimer = 0.0f;
+	}
+	// Keep sending while timer is active
+	if (jumpSendTimer > 0.0f) {
+		newPacket.buttonstates[0] = 1;
+		jumpSendTimer -= dt;
+	}
+
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 
-	// 2. Send packet to server
-	thisClient->SendPacket(newPacket);
+
 
 	// --- Modification Start: Local Logic ---
 
-	if (localPlayerID >= 0 && localPlayerID < players.size()) {
+	/*if (localPlayerID >= 0 && localPlayerID < players.size()) {
 		Player* localPlayer = players[localPlayerID];
 		if (localPlayer) {
 			PlayerInputs inputs;
@@ -572,7 +586,7 @@ void NetworkedGame::UpdateAsClient(float dt) {
 			localPlayer->SetIgnoreInput(false);
 			localPlayer->SetPlayerInput(inputs);
 		}
-	}
+	}*/
 	// --- Modification End ---
 
 	// check connection every second (keep unchanged)
@@ -585,6 +599,8 @@ void NetworkedGame::UpdateAsClient(float dt) {
 		thisClient->SendPacket(connectPacket);
 		connectTimer = 0.0f;
 	}
+
+	thisClient->SendPacket(newPacket); // Send packet to server
 }
 
 GameObject* NetworkedGame::SpawnNetworkedPlayer(int playerID) {
