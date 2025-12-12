@@ -6,6 +6,8 @@
 #include "GameWorld.h"
 #include "Window.h"
 #include "Matrix.h"
+#include "Package.h" // Ensure Package header is included to access GetHealth
+
 #define COLLISION_MSG 30
 #define GLOBAL_STATE_MSG 50 
 #define HIGHSCORE_MSG 60 
@@ -20,30 +22,28 @@ struct GlobalStatePacket : public GamePacket {
 
 	// player states
 	bool p2Connected;
-	bool p1Dead;
-	bool p2Dead;
 	int  gameOverReason;
 
 	// package states
 	float packageHealth;
 	bool  packageBroken;
-	float packageTimer;
 
+	// Held Items
 	int p1HeldItemID;
 	int p2HeldItemID;
+	int rivalHeldItemID;
 
 	GlobalStatePacket() {
 		type = GLOBAL_STATE_MSG;
 		size = sizeof(GlobalStatePacket) - sizeof(GamePacket);
 		p2Connected = false;
-		p1Dead = false;
-		p2Dead = false;
 		gameOverReason = 0;
 		packageHealth = 100.0f;
 		packageBroken = false;
-		packageTimer = 0.0f;
+
 		p1HeldItemID = -1; // -1 means nothing held
 		p2HeldItemID = -1;
+		rivalHeldItemID = -1; // -1 means nothing held
 	}
 };
 
@@ -266,9 +266,13 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	// Just take the results calculated by MyGame to send packets
 	GlobalStatePacket statePacket;
 	statePacket.useGravity = useGravity;
+
+	// --- Sync Held Items (For Green Lines) ---
 	// Get the NetworkID of the item held by the player
 	statePacket.p1HeldItemID = -1;
 	statePacket.p2HeldItemID = -1;
+	statePacket.rivalHeldItemID = -1;
+
 	// Check Player 1 (Host)
 	if (!players.empty() && players[0]->GetHeldItem()) {
 		NetworkObject* no = players[0]->GetHeldItem()->GetNetworkObject();
@@ -279,6 +283,12 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	if (players.size() > 1 && players[1]->GetHeldItem()) {
 		NetworkObject* no = players[1]->GetHeldItem()->GetNetworkObject();
 		if (no) statePacket.p2HeldItemID = no->GetNetworkID();
+	}
+
+	// [Added] Sync item held by Rival, ensuring client can draw Rival's green line
+	if (rival && rival->GetHeldItem()) {
+		NetworkObject* no = rival->GetHeldItem()->GetNetworkObject();
+		if (no) statePacket.rivalHeldItemID = no->GetNetworkID();
 	}
 
 	// Sync score
@@ -303,13 +313,6 @@ void NetworkedGame::UpdateAsServer(float dt) {
 		statePacket.packageBroken = packageObject->IsBroken();
 	}
 
-	// Get player death state (for UI)
-	// This step is a bit redundant, but kept for convenience in packet sending, or could read players[i]->IsDead() directly
-	statePacket.p1Dead = false;
-	statePacket.p2Dead = false;
-	if (!players.empty()) statePacket.p1Dead = players[0]->IsDead();
-	if (players.size() > 1) statePacket.p2Dead = players[1]->IsDead();
-
 	thisServer->SendGlobalPacket(statePacket);
 
 	// Snapshot logic remains unchanged
@@ -321,7 +324,6 @@ void NetworkedGame::UpdateAsServer(float dt) {
 	else {
 		BroadcastSnapshot(true);
 	}
-
 }
 
 void NetworkedGame::BroadcastSnapshot(bool deltaFrame) {
@@ -421,25 +423,32 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 		}
 		if (rival) rival->SetScore(packet->rivalScore);
 		this->score = packet->playerScore;
+
 		// Client handles package logic
 		if (packageObject) {
 			// Sync health (for correct UI display)
 			packageObject->SetHealth(packet->packageHealth);
 
-			// Handle fragmentation logic
+			// [Fake Sync] Client only decides local logic based on isBroken sent by server
 			if (packet->packageBroken) {
-				// Set local object state
-				packageObject->SetBroken(true); // If this function doesn't exist, need to add it to Package
+				packageObject->SetBroken(true); // If Package class doesn't have SetBroken, need to add it
 
-				// Force the holder to let go!
-				// If not released, the client will keep trying to pull the package back, causing visual glitches
+				// Package broken, must cut off everyone's connection, otherwise there will be residual green lines
 				for (Player* p : players) {
-					if (p->GetHeldItem() == packageObject) {
-						p->ThrowHeldItem(Vector3(0, 0, 0)); // Position sync will only be smooth after letting go
+					if (p && p->GetHeldItem() == packageObject) {
+						p->SetHeldItemNetwork(nullptr);
 					}
 				}
+				if (rival && rival->GetHeldItem() == packageObject) {
+					rival->SetHeldItemNetwork(nullptr);
+				}
+			}
+			else {
+				// If package is fixed
+				packageObject->SetBroken(false);
 			}
 		}
+
 		// Sync visual effect of grapple line
 		if (thisClient) { // Only client needs to sync this, server already knows
 
@@ -460,7 +469,6 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			// Handle Player 1 (Server Player)
 			if (!players.empty()) {
 				GameObject* heldItem = FindObjByID(packet->p1HeldItemID);
-				// Call the new function we wrote in step 1
 				players[0]->SetHeldItemNetwork(heldItem);
 			}
 
@@ -470,7 +478,13 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 				GameObject* heldItem = FindObjByID(packet->p2HeldItemID);
 				players[1]->SetHeldItemNetwork(heldItem);
 			}
+			// [Added] Sync item held by Rival, ensuring client can draw Rival's green line
+			if (rival) {
+				GameObject* heldItem = FindObjByID(packet->rivalHeldItemID);
+				rival->SetHeldItemNetwork(heldItem); // Rival is AI, direct SetHeldItem is fine (no physics on client)
+			}
 		}
+
 		// Sync game over reason
 		GameOverReason serverReason = (GameOverReason)packet->gameOverReason;
 		if (!this->isGameWon && !this->isGameOver) {
@@ -490,10 +504,6 @@ void NetworkedGame::ReceivePacket(int type, GamePacket* payload, int source) {
 			}
 		}
 
-		// Sync player death state and connection state
-		// Save for UI rendering
-		ui_p1Dead = packet->p1Dead;
-		ui_p2Dead = packet->p2Dead;
 		ui_p2Connected = packet->p2Connected;
 
 		// Update local Player object state (optional, to prevent the corpse from moving)
@@ -527,7 +537,7 @@ void NetworkedGame::ServerProcessClientInput(int playerID, ClientPacket* packet)
 	if (packet->buttonstates[0] > 0) inputs.jump = true;
 	if (packet->buttonstates[1] > 0) inputs.attack = true;
 
-	// [Critical] Convert network packet to Player input
+	// Convert network packet to Player input
 	playerObj->SetPlayerInput(inputs);
 }
 
@@ -569,25 +579,25 @@ void NetworkedGame::UpdateAsClient(float dt) {
 
 	if (Window::GetMouse()->ButtonPressed(MouseButtons::Left)) newPacket.buttonstates[1] = 1;
 
-
-
-	// --- Modification Start: Local Logic ---
-
-	/*if (localPlayerID >= 0 && localPlayerID < players.size()) {
+	// Local red line simulation, this is visual 'sync', no need to wait for server packet.
+	// Inject input state locally on client, so Player::DrawGrappleLine can detect inputs.attack = true
+	if (localPlayerID >= 0 && localPlayerID < players.size()) {
 		Player* localPlayer = players[localPlayerID];
 		if (localPlayer) {
 			PlayerInputs inputs;
-
-			// Force movement axis to 0!
-			// This way "if (currentInputs.isMoving)" in Player::PlayerControl will skip physics force application
+			// Set axis input to 0, avoiding conflict between local prediction movement and server position
 			inputs.axis = Vector3(0, 0, 0);
-			inputs.isMoving = false; // Explicitly tell local logic: Do not move!
+			inputs.isMoving = false;
+			inputs.cameraYaw = world.GetMainCamera().GetYaw();
 
-			localPlayer->SetIgnoreInput(false);
-			localPlayer->SetPlayerInput(inputs);
+			inputs.attack = (Window::GetMouse()->ButtonPressed(MouseButtons::Left));
+			inputs.jump = (Window::GetKeyboard()->KeyPressed(KeyCodes::SPACE));
+
+			localPlayer->SetIgnoreInput(false); // Temporarily allow
+			localPlayer->SetPlayerInput(inputs); // Apply input
+			localPlayer->SetIgnoreInput(true);  // Restore ignore
 		}
-	}*/
-	// --- Modification End ---
+	}
 
 	// check connection every second (keep unchanged)
 	static float connectTimer = 0.0f;
@@ -662,10 +672,6 @@ void NetworkedGame::DrawNetworkHUD() {
 	// Draw Player 1
 	Vector4 p1Color = Vector4(0, 1, 0, 1); // green name means alive
 
-	if (ui_p1Dead) {
-		p1Color = Vector4(1, 0, 0, 1); // dead is red name
-	}
-
 	Debug::Print("Player 1", Vector2(startX, startY), p1Color);
 
 	// Draw Player 2
@@ -676,13 +682,17 @@ void NetworkedGame::DrawNetworkHUD() {
 
 	if (isP2Online) {
 		p2Color = Vector4(0, 1, 0, 1); // green
+	}
+	Debug::Print(p2Name, Vector2(startX, startY + 5), p2Color);
 
-		if (ui_p2Dead) {
-			p2Color = Vector4(1, 0, 0, 1); // red
+	// [Fake Sync UI]
+	// Client decides whether to show respawn info based on package health
+	// Show as long as health <= 0. Once reset on server, health goes back to 100, and this disappears automatically.
+	if (packageObject) {
+		if (packageObject->GetHealth() <= 0.0f || packageObject->IsBroken()) {
+			Debug::Print("Package Respawning...", Vector2(40, 55), Vector4(1, 0, 0, 1));
 		}
 	}
-
-	Debug::Print(p2Name, Vector2(startX, startY + 5), p2Color);
 }
 
 void NetworkedGame::Disconnect() {

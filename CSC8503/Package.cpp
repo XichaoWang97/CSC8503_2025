@@ -47,7 +47,7 @@ void Package::Update(float dt) {
     if (isBroken) {
         timer -= dt;
         GetTransform().SetPosition(Vector3(0, -9999, 0));
-        //Debug::Print("Package respawning in: " + std::to_string((int)timer + 1), Vector2(40, 55), Vector4(1, 0, 0, 1));
+        Debug::Print("Package respawning in: " + std::to_string((int)timer + 1), Vector2(30, 50), Vector4(1, 0, 0, 1));
 
         if (timer <= 0.0f) {
             Reset();

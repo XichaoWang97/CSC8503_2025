@@ -238,6 +238,113 @@ void MyGame::InitDefaultPlayer() {
 	}
 }
 
+// Generate a maze with Greedy Meshing!
+void MyGame::InitHedgeMaze() {
+	const int width = 30;
+	const int height = 18;
+	// Original map data
+	int mazeLayout[height][width] = {
+		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+		{1, 0, 0, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 1, 1, 1, 0 ,1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1},
+		{1, 0, 1, 1, 1, 0 ,1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
+		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		{1, 1, 1, 1, 1, 1 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	};
+
+	// Helper array: Mark which cells have been processed
+	// true means processed, false means not processed
+	bool processed[height][width] = { false };
+
+	Vector3 startPos = Vector3(0, 6, 0);
+	float cubeSize = 5.0f;           // Radius
+	float nodeSize = cubeSize * 2.0f; // Diameter
+
+	for (int z = 0; z < height; ++z) {
+		for (int x = 0; x < width; ++x) {
+
+			// If this point is not a wall, or is a wall but already processed, skip it
+			if (mazeLayout[z][x] == 0 || processed[z][x]) {
+				continue;
+			}
+
+			// Determine current rectangle width (extend right)
+			int currentWidth = 0;
+			// Search right from current x until hitting non-wall, boundary, or processed cell
+			while ((x + currentWidth < width) &&
+				mazeLayout[z][x + currentWidth] == 1 &&
+				!processed[z][x + currentWidth]) {
+				currentWidth++;
+			}
+
+			// Determine current rectangle height (extend down)
+			int currentHeight = 1; // At least the current row
+			while (z + currentHeight < height) {
+				// Check every cell in the next row for the corresponding width, must be all walls and unprocessed
+				bool canExtend = true;
+				for (int k = 0; k < currentWidth; ++k) {
+					if (mazeLayout[z + currentHeight][x + k] == 0 ||
+						processed[z + currentHeight][x + k]) {
+						canExtend = false;
+						break;
+					}
+				}
+				if (canExtend) {
+					currentHeight++;
+				}
+				else {
+					break; // Next row doesn't meet conditions, stop extending
+				}
+			}
+
+			// Mark these cells as processed
+			for (int h = 0; h < currentHeight; ++h) {
+				for (int w = 0; w < currentWidth; ++w) {
+					processed[z + h][x + w] = true;
+				}
+			}
+
+			// Generate this merged large rectangle
+			float centerX = startPos.x + (x * nodeSize) + (currentWidth * nodeSize * 0.5f) - cubeSize;
+			float centerZ = startPos.z + (z * nodeSize) + (currentHeight * nodeSize * 0.5f) - cubeSize;
+
+			Vector3 pos = Vector3(centerX, startPos.y, centerZ);
+
+			// Define a tiny shrink distance (Gap). A 0.05f shrink means there will be a 0.1f gap between two walls.
+			// The gap is visually almost invisible, but it is a huge safety distance for the physics engine.
+			float shrinkPadding = 0.05f;
+
+			// Half size of the physics bounding box
+			Vector3 wallDim = Vector3(
+				currentWidth * cubeSize - shrinkPadding,
+				cubeSize * 1.2f - shrinkPadding, // Height remains unchanged
+				currentHeight * cubeSize - shrinkPadding
+			);
+
+			GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
+
+			// set colour to green
+			if (x >= 6 && x <= 23) {
+				if (hedge->GetRenderObject()) {
+					hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
+				}
+			}
+		}
+	}
+}
+
 GameObject* MyGame::AddFloorToWorld(const Vector3& position) {
 	GameObject* floor = new GameObject("floor");
 
@@ -597,7 +704,7 @@ void MyGame::GetCoinLogic(Player* player, float dt) {
 		if (playerHeld) {
 			if (player_dist < 2.5f && playerHeld->GetName() == "FragilePackage") {
 				Vector3 coinPos = c->GetTransform().GetPosition();
-				packageObject->SetInitPosition(coinPos); // if package is broken, it will reborn here!
+				packageObject->SetInitPosition(Vector3(coinPos.x, 3, coinPos.z)); // if package is broken, it will reborn here!
 				c->GetTransform().SetPosition(Vector3(0, -999, 0));// set position to -999
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
@@ -634,8 +741,12 @@ void MyGame::WinLoseLogic(Player* player) {
 		bool inZone = (PackagePos.x > zonePos.x - zoneSize.x && PackagePos.x < zonePos.x + zoneSize.x &&
 			PackagePos.z > zonePos.z - zoneSize.z && PackagePos.z < zonePos.z + zoneSize.z);
 
+		Vector3 playerpos = players[0]->GetTransform().GetPosition();
+		bool playerinzone = (playerpos.x > zonePos.x - zoneSize.x && playerpos.x < zonePos.x + zoneSize.x &&
+			playerpos.z > zonePos.z - zoneSize.z && playerpos.z < zonePos.z + zoneSize.z);
+
 		// score && inZone -> win
-		if (inZone && score >= winningScore) {
+		if (playerinzone && score >= winningScore) {
 			isGameWon = true;
 			isTimerRunning = false;
 			gameOverReason = GameOverReason::PlayerWin;
@@ -679,7 +790,7 @@ void MyGame::RivalLogic() {
 		if (rivalHeld) {
 			if (rival_dist < 2.5f && rivalHeld->GetName() == "FragilePackage") {
 				Vector3 coinPos = c->GetTransform().GetPosition();
-				packageObject->SetInitPosition(coinPos); // if package is broken, it will reborn here!
+				packageObject->SetInitPosition(Vector3(coinPos.x, 3, coinPos.z)); // if package is broken, it will reborn here!
 				c->GetTransform().SetPosition(Vector3(0, -999, 0)); // remove coin from world
 				packageObject->IncreaseCollectionCount(); // increase package collection count
 				coins.erase(coins.begin() + i); // remove coin from vector
@@ -709,7 +820,7 @@ void MyGame::FormatTime(float time, std::string& outStr) {
 }
 
 void MyGame::DrawHighScoreHUD() {
-	// [Critical Change] Get corresponding list based on current mode
+	// Get corresponding list based on current mode
 	auto& scores = HighScoreManager::Instance().GetScores(isNetworkGame);
 
 	float startY = 30.0f;
@@ -795,111 +906,4 @@ void MyGame::InitCourierLevel() {
 	puzzleDoor.push_back(door2);
 
 	InitHedgeMaze();
-}
-
-// Generate a maze with Greedy Meshing!
-void MyGame::InitHedgeMaze() {
-	const int width = 30;
-	const int height = 18;
-	// Original map data
-	int mazeLayout[height][width] = {
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-		{1, 0, 0, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 1, 1, 1, 0 ,1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1},
-		{1, 0, 1, 1, 1, 0 ,1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0 ,1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 1, 1, 1, 1, 1 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-	};
-
-	// Helper array: Mark which cells have been processed
-	// true means processed, false means not processed
-	bool processed[height][width] = { false };
-
-	Vector3 startPos = Vector3(0, 6, 0);
-	float cubeSize = 5.0f;           // Radius
-	float nodeSize = cubeSize * 2.0f; // Diameter
-
-	for (int z = 0; z < height; ++z) {
-		for (int x = 0; x < width; ++x) {
-
-			// If this point is not a wall, or is a wall but already processed, skip it
-			if (mazeLayout[z][x] == 0 || processed[z][x]) {
-				continue;
-			}
-
-			// Determine current rectangle width (extend right)
-			int currentWidth = 0;
-			// Search right from current x until hitting non-wall, boundary, or processed cell
-			while ((x + currentWidth < width) &&
-				mazeLayout[z][x + currentWidth] == 1 &&
-				!processed[z][x + currentWidth]) {
-				currentWidth++;
-			}
-
-			// Determine current rectangle height (extend down)
-			int currentHeight = 1; // At least the current row
-			while (z + currentHeight < height) {
-				// Check every cell in the next row for the corresponding width, must be all walls and unprocessed
-				bool canExtend = true;
-				for (int k = 0; k < currentWidth; ++k) {
-					if (mazeLayout[z + currentHeight][x + k] == 0 ||
-						processed[z + currentHeight][x + k]) {
-						canExtend = false;
-						break;
-					}
-				}
-				if (canExtend) {
-					currentHeight++;
-				}
-				else {
-					break; // Next row doesn't meet conditions, stop extending
-				}
-			}
-
-			// Mark these cells as processed
-			for (int h = 0; h < currentHeight; ++h) {
-				for (int w = 0; w < currentWidth; ++w) {
-					processed[z + h][x + w] = true;
-				}
-			}
-
-			// Generate this merged large rectangle
-			float centerX = startPos.x + (x * nodeSize) + (currentWidth * nodeSize * 0.5f) - cubeSize;
-			float centerZ = startPos.z + (z * nodeSize) + (currentHeight * nodeSize * 0.5f) - cubeSize;
-
-			Vector3 pos = Vector3(centerX, startPos.y, centerZ);
-
-			// Define a tiny shrink distance (Gap). A 0.05f shrink means there will be a 0.1f gap between two walls.
-            // The gap is visually almost invisible, but it is a huge safety distance for the physics engine.
-			float shrinkPadding = 0.05f;
-
-			// Half size of the physics bounding box
-			Vector3 wallDim = Vector3(
-				currentWidth * cubeSize - shrinkPadding,
-				cubeSize * 1.2f - shrinkPadding, // Height remains unchanged
-				currentHeight * cubeSize - shrinkPadding
-			);
-
-			GameObject* hedge = AddCubeToWorld(pos, wallDim, 0.0f, "HedgeWall");
-
-			// set colour to green
-			if (x >= 6 && x <= 23) {
-				if (hedge->GetRenderObject()) {
-					hedge->GetRenderObject()->SetColour(Vector4(0.1f, 0.6f, 0.1f, 1.0f));
-				}
-			}
-		}
-	}
 }

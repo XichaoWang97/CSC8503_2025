@@ -27,7 +27,6 @@ namespace NCL {
             bool GetAttached() const { return isAttached; }
             int GetCollectionCount() const { return collectionCount; }
             void IncreaseCollectionCount() { collectionCount++; }
-            float GetRespawnTimer() const { return timer; }
 
             // Package can be held by many players, so use int, not bool here
             // and we always set the count by 1 or -1
